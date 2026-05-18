@@ -1,0 +1,13 @@
+.env
+.tmp/
+credentials.json
+token.json
+__pycache__/
+*.pyc
+.DS_Store
+nohup.out
+.claude/
+*.log
+execution/.last_shopify_order
+execution/get_shopify_token.py
+setup_oauth.py
