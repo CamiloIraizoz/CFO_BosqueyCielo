@@ -1,3 +1,5 @@
 anthropic==0.102.0
 requests==2.32.5
 python-dotenv==1.2.1
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
