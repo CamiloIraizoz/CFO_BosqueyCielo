@@ -1,118 +1,58 @@
 #!/usr/bin/env python3
 """
-Bot de Telegram para gestión financiera de Amphora B&C.
-Uso: python3 execution/bot.py
+Bot de Telegram CFO para Amphora B&C.
+Uso local:  python3 execution/bot.py
+Railway:    configura las env vars y haz deploy del repo.
 """
 import os
-import json
+import sys
 import time
 import base64
-import subprocess
 import requests
 import anthropic
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Carga .env en local; en Railway las variables vienen del entorno directamente
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path, override=False)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+sys.path.insert(0, str(Path(__file__).parent))
+from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas
+
+TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-COMPOSIO = os.path.expanduser("~/.composio/composio")
-TG_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# ── Google Sheets via Composio ─────────────────────────────────────────────────
-
-def composio_call(tool: str, data: dict) -> dict:
-    result = subprocess.run(
-        [COMPOSIO, "execute", tool, "-d", json.dumps(data)],
-        capture_output=True, text=True, timeout=30
-    )
-    stdout = "\n".join(
-        l for l in result.stdout.splitlines()
-        if "Update available" not in l and "composio upgrade" not in l
-    ).strip()
-    try:
-        return json.loads(stdout)
-    except Exception:
-        return {"successful": False, "error": result.stderr or stdout}
-
-def leer_sheet(rango: str) -> str:
-    resp = composio_call("GOOGLESHEETS_VALUES_GET", {
-        "spreadsheet_id": SPREADSHEET_ID,
-        "range": rango,
-        "value_render_option": "FORMATTED_VALUE"
-    })
-    if resp.get("successful"):
-        valores = resp["data"].get("values", [])
-        if not valores:
-            return f"(rango vacío: {rango})"
-        return "\n".join(" | ".join(str(c) for c in fila) for fila in valores if fila)
-    return f"Error leyendo {rango}: {resp.get('error', 'desconocido')}"
-
-def agregar_fila(rango: str, valores: list) -> str:
-    resp = composio_call("GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND", {
-        "spreadsheet_id": SPREADSHEET_ID,
-        "range": rango,
-        "values": [valores],
-        "value_input_option": "USER_ENTERED",
-        "insert_data_option": "INSERT_ROWS"
-    })
-    if resp.get("successful"):
-        return "Fila agregada correctamente."
-    return f"Error: {resp.get('error', 'desconocido')}"
-
-def actualizar_celda(rango: str, valor: str) -> str:
-    resp = composio_call("GOOGLESHEETS_VALUES_UPDATE", {
-        "spreadsheet_id": SPREADSHEET_ID,
-        "range": rango,
-        "values": [[valor]],
-        "value_input_option": "USER_ENTERED"
-    })
-    if resp.get("successful"):
-        return f"Celda {rango} actualizada a '{valor}'."
-    return f"Error: {resp.get('error', 'desconocido')}"
-
-def listar_pestanas() -> str:
-    resp = composio_call("GOOGLESHEETS_GET_SHEET_NAMES", {
-        "spreadsheet_id": SPREADSHEET_ID
-    })
-    if resp.get("successful"):
-        return ", ".join(resp["data"].get("sheet_names", []))
-    return "Error listando pestañas"
+conversation_history: dict[int, list] = {}
+REGISTRO_KEYWORDS = ["registr", "anotad", "guardad", "agregad", "añadid", "✅"]
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
 TOOLS = [
     {
         "name": "leer_sheet",
-        "description": "Lee un rango de celdas del Google Sheet de finanzas. Úsalo para obtener datos de ingresos, egresos, PNL, flujo de caja, proyectado, etc. Si el nombre de la pestaña tiene espacios, usa comillas simples (ej: \"'Pottery Lab '!A1:F20\").",
+        "description": "Lee un rango de celdas del Google Sheet de finanzas.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "rango": {
-                    "type": "string",
-                    "description": "Rango A1, ej: 'PNL!A1:F25', \"'Ingresos/Egresos Consolidados'!A1:J20\", 'Materia Prima!A1:F50'"
-                }
+                "rango": {"type": "string", "description": "Ej: 'Movimientos!A1:J500', 'Resumen!A1:N50'"}
             },
             "required": ["rango"]
         }
     },
     {
         "name": "agregar_fila",
-        "description": "Agrega una fila nueva al final de una pestaña. Úsalo para registrar un egreso, ingreso, compra de materia prima, pago de mano de obra, etc. Lee primero la pestaña para conocer las columnas.",
+        "description": "Registra un movimiento nuevo en Movimientos. SIEMPRE usar este tool para registrar — nunca solo describir el movimiento sin llamarlo.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "rango": {"type": "string", "description": "Pestaña destino, ej: 'Materia Prima!A:F'"},
+                "rango": {"type": "string", "description": "Siempre 'Movimientos!A:J'"},
                 "valores": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Valores por columna. Números sin $ ni puntos (ej: 736500)."
+                    "description": "10 valores en orden: Fecha, Mes, Año, Tipo, Categoría, Descripción, Cliente/Proveedor, Método, Monto, Estado"
                 }
             },
             "required": ["rango", "valores"]
@@ -120,11 +60,11 @@ TOOLS = [
     },
     {
         "name": "actualizar_celda",
-        "description": "Actualiza el valor de una celda específica. Para marcar pagos como 'OK Pagado', corregir montos, etc.",
+        "description": "Actualiza una celda específica. Para marcar Estado='OK' cuando se confirma pago.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "rango": {"type": "string", "description": "Celda exacta, ej: 'Mano de Obra!F5'"},
+                "rango": {"type": "string", "description": "Celda exacta, ej: 'Movimientos!J15'"},
                 "valor": {"type": "string", "description": "Nuevo valor"}
             },
             "required": ["rango", "valor"]
@@ -137,67 +77,60 @@ TOOLS = [
     }
 ]
 
-SYSTEM_PROMPT = """Eres el CFO virtual de Amphora B&C, empresa colombiana de cerámica artesanal.
-Registras y analizas finanzas en Google Sheets. Respuestas CORTAS. Sin explicaciones innecesarias.
+SYSTEM_PROMPT = """Eres el CFO virtual de Amphora B&C (cerámica colombiana). Solo español.
 
-═══ PESTAÑA PRINCIPAL: "Movimientos" ═══
-Columnas en orden exacto:
-A: Fecha (DD/MM/AAAA)   B: Mes   C: Año   D: Tipo (Ingreso/Egreso)
-E: Categoría (nombre EXACTO de la lista)   F: Descripción   G: Cliente/Proveedor
-H: Método (Shopify | Bold | Efectivo | Transferencia | Nequi | Daviplata)
-I: Monto (entero sin $ ni puntos: 75000)
+REGLAS ABSOLUTAS DE RESPUESTA:
+- Máximo 2 líneas por respuesta. NUNCA tablas. NUNCA listas con guiones.
+- Al registrar: UNA sola línea de confirmación. Nada más.
+- Al consultar: máximo 5 líneas en formato "Concepto: $monto".
+- NUNCA digas que registraste algo sin haber llamado agregar_fila primero.
+- NUNCA pidas información que ya tienes del historial o del pantallazo.
 
-═══ CATEGORÍAS VÁLIDAS ═══
-INGRESOS: Ecommerce | Shop | Studio Amphora | Pottery Lab | Ceramikids | B2B | Personalización | Kintsugi | Otros Ingresos | Ingresos Financieros
-EGRESOS Producción: Materia Prima | Mano de Obra | Costos Indirectos
-EGRESOS Venta: Redes Sociales | Publicidad | Eventos | Envíos | Comisiones Pasarela | Fee Shopify | Empaques
-EGRESOS Admin: Arriendo | Salario Gerente | Aportes | Contadora | Servicios Admin
-EGRESOS Otros: Devoluciones | Gastos Financieros | Impuesto de Renta
+PESTAÑA: Movimientos — 10 columnas A:J
+A:Fecha(DD/MM/AAAA) B:Mes C:Año D:Tipo E:Categoría F:Descripción G:Cliente/Proveedor H:Método I:Monto(sin$) J:Estado(vacío)
 
-═══ LECTURA DE PANTALLAZOS ═══
-Extrae siempre estos 5 datos del comprobante:
-  1. MONTO: valor principal (Total, Valor pagado, Monto). Sin $ ni puntos.
-  2. FECHA: DD/MM/AAAA. Si no aparece → usa hoy.
-  3. QUIÉN: nombre del negocio, persona o referencia.
-  4. MÉTODO — detecta por logo/texto:
-       Nequi (morado) → Nequi
-       Bancolombia / Sucursal Virtual / transferencia interbancaria → Transferencia
-       Daviplata (verde) → Daviplata
-       Bold → Bold
-       Recibo efectivo / caja registradora → Efectivo
-  5. TIPO — busca frases clave:
-       "recibiste" / "te pagaron" / "pago exitoso" / "ingreso" → Ingreso
-       "pagaste" / "débito" / "cobro" / "salida" → Egreso
-Si falta un dato, haz UNA sola pregunta.
+TIPOS: Ingreso / Egreso
+MÉTODOS: Shopify | Bold | Efectivo | Transferencia | Nequi | Daviplata
+ESTADO: siempre vacío al registrar (salvo pendiente explícito)
 
-═══ CLASIFICACIÓN ═══
-Tienda/Bold/caja → Shop | Mensualidad/amphora/estudiante → Studio Amphora
-Pottery Lab/taller → Pottery Lab | Ceramikids/niños → Ceramikids
-Shopify/online → Ecommerce | Pedido especial/encargo → Personalización
-B2B/corporativo/empresa → B2B | Kintsugi → Kintsugi
-Arcilla/esmalte/insumo → Materia Prima | Jessica/Andrea/Don Jair/honorarios → Mano de Obra
-Horno/mantenimiento equipo → Costos Indirectos
-Instagram/redes/community → Redes Sociales | Pauta/ads → Publicidad
-Evento/feria/activación → Eventos | Domicilio/envío → Envíos
-Comisión/datáfono/pasarela → Comisiones Pasarela | Shopify plan → Fee Shopify
-Arriendo/local/bodega → Arriendo | Sueldo gerente/Camilo → Salario Gerente
-Aportes/seguridad social/salud/pensión/ARL → Aportes
-Contadora/contador → Contadora | Internet/servicios/agua/luz → Servicios Admin
-Impuesto/renta → Impuesto de Renta | Intereses deuda → Gastos Financieros
+CATEGORÍAS INGRESO: Ecommerce | Shop | Studio Amphora | Pottery Lab | Ceramikids | B2B | Personalización | Kintsugi | Otros Ingresos | Ingresos Financieros
+CATEGORÍAS EGRESO Producción: Materia Prima | Mano de Obra | Costos Indirectos
+CATEGORÍAS EGRESO Venta: Redes Sociales | Publicidad | Eventos | Envíos | Comisiones Pasarela | Fee Shopify | Empaques
+CATEGORÍAS EGRESO Admin: Arriendo | Salario Gerente | Aportes | Contadora | Servicios Admin
+CATEGORÍAS EGRESO Otros: Devoluciones | Gastos Financieros | Impuesto de Renta
 
-═══ FLUJO ═══
-1. Si hay imagen: extrae los 5 datos. Si hay texto: interpreta.
-2. Clasifica Tipo + Categoría.
-3. agregar_fila en "Movimientos!A:I" con los 9 valores.
-4. Responde: ✅ [Categoría] · $[monto con puntos] · [fecha]
+CLASIFICACIÓN:
+Jessica/Andrea/Don Jair/honorarios→Mano de Obra | Arcilla/esmalte/insumo→Materia Prima | Horno/equipo→Costos Indirectos
+Tienda/Bold/caja→Shop | Mensualidad/amphora/estudiante→Studio Amphora | Pottery Lab/taller adultos→Pottery Lab
+Ceramikids/niños→Ceramikids | Shopify/online→Ecommerce | Pedido especial/encargo→Personalización | B2B/empresa→B2B
+Redes/community→Redes Sociales | Pauta/ads→Publicidad | Evento/feria→Eventos | Domicilio/envío→Envíos
+Pasarela/datáfono→Comisiones Pasarela | Plan Shopify→Fee Shopify | Arriendo/local→Arriendo
+Sueldo Camilo/gerente→Salario Gerente | Salud/pensión/ARL→Aportes | Contadora→Contadora | Internet/agua/luz→Servicios Admin
 
-═══ CONSULTAS ═══
-PnL → leer_sheet("Resumen!A1:N50"). Filas 20/40/50 = márgenes %.
-Nunca inventes cifras — siempre lee del Sheet.
+DETECCIÓN EN PANTALLAZO:
+- "Transferencia exitosa" + Bancolombia/sucursal virtual → Método=Transferencia, Tipo=Egreso
+- "recibiste"/"te pagaron"/"pago exitoso" → Tipo=Ingreso
+- Nequi(morado)→Nequi | Daviplata(verde)→Daviplata | Bold→Bold | caja/recibo→Efectivo
+- Usuario dice "en efectivo" → Método=Efectivo, no preguntes
 
-═══ CONTEXTO ═══
-Moneda COP. Empleados: Daniela (gerente), Jessica (talleres), Andrea (Ceramikids), Don Jair (mantenimiento).
-"Amphoras" = estudiantes Studio Amphora. Responde en español."""
+FLUJO DE REGISTRO — SIGUE ESTE ORDEN EXACTO:
+1. Con el pantallazo + texto, extrae: Monto · Fecha · Tipo · Categoría · Quién · Método
+2. Si tienes Monto + Tipo + Categoría → registra AHORA con agregar_fila. No esperes más.
+   Si falta solo Quién → usa la descripción disponible y registra igual.
+   Si falta Monto → pregunta solo "¿Cuánto?"
+   Si falta Categoría → pregunta solo "¿Es [A] o [B]?"
+3. Llama agregar_fila con los 10 valores.
+4. Responde SOLO: ✅ Categoría · $monto · fecha · método
+
+CUENTAS PENDIENTES:
+"¿qué debo?" → leer Movimientos!A1:J500, mostrar Egresos con Estado vacío: "Categoría · $monto · fecha"
+"¿me deben?" → leer Movimientos!A1:J500, mostrar Ingresos con Estado vacío: mismo formato
+Confirmar pago → actualizar_celda columna J a "OK"
+
+PNL: leer_sheet("Resumen!A1:N50"). Filas 20/39/49=márgenes%. Nunca inventes cifras.
+
+CONTEXTO: COP. Daniela=gerente, Jessica=talleres, Andrea=Ceramikids, Don Jair=mantenimiento. Amphoras=estudiantes."""
+
 
 def descargar_foto(file_id: str):
     try:
@@ -208,7 +141,9 @@ def descargar_foto(file_id: str):
         return None
 
 
-def procesar_mensaje(texto: str, foto_bytes=None) -> str:
+def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
+    history = conversation_history.get(chat_id, [])
+
     if foto_bytes:
         img_b64 = base64.standard_b64encode(foto_bytes).decode()
         content = []
@@ -216,17 +151,25 @@ def procesar_mensaje(texto: str, foto_bytes=None) -> str:
             content.append({"type": "text", "text": texto})
         content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}})
         if not texto:
-            content.append({"type": "text", "text": "Analiza este pantallazo y registra el movimiento si puedes extraer la información. Si falta info, pregunta qué necesitas."})
-        messages = [{"role": "user", "content": content}]
+            content.append({"type": "text", "text": "Registra este movimiento."})
+        history_user_text = f"[pantallazo] {texto}".strip()
     else:
-        messages = [{"role": "user", "content": texto}]
+        content = texto
+        history_user_text = texto
+
+    messages = history + [{"role": "user", "content": content}]
+    agregar_fila_llamado = False
+    intentos = 0
 
     while True:
+        tool_choice = {"type": "any"} if intentos > 0 else {"type": "auto"}
+
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
+            model="claude-sonnet-4-6",
+            max_tokens=512,
             system=SYSTEM_PROMPT,
             tools=TOOLS,
+            tool_choice=tool_choice,
             messages=messages
         )
 
@@ -239,44 +182,52 @@ def procesar_mensaje(texto: str, foto_bytes=None) -> str:
                         resultado = leer_sheet(inp["rango"])
                     elif name == "agregar_fila":
                         resultado = agregar_fila(inp["rango"], inp["valores"])
+                        agregar_fila_llamado = True
                     elif name == "actualizar_celda":
                         resultado = actualizar_celda(inp["rango"], inp["valor"])
                     elif name == "listar_pestanas":
                         resultado = listar_pestanas()
                     else:
                         resultado = f"Herramienta desconocida: {name}"
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": resultado
-                    })
+                    tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         else:
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return block.text
-            return "Sin respuesta."
+            respuesta = next((b.text for b in response.content if hasattr(b, "text")), "Sin respuesta.")
 
-# ── Telegram polling ───────────────────────────────────────────────────────────
+            parece_registro = any(k in respuesta.lower() for k in REGISTRO_KEYWORDS)
+            if parece_registro and not agregar_fila_llamado and intentos == 0:
+                print(f"[{chat_id}] Alucinación detectada — forzando agregar_fila")
+                intentos += 1
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": [{
+                    "type": "text",
+                    "text": "IMPORTANTE: Dijiste que registraste pero NO llamaste agregar_fila. Llama agregar_fila ahora."
+                }]})
+                continue
+
+            new_history = history + [
+                {"role": "user", "content": history_user_text},
+                {"role": "assistant", "content": respuesta}
+            ]
+            conversation_history[chat_id] = new_history[-20:]
+            return respuesta
+
 
 def tg_send(chat_id, texto):
     requests.post(f"{TG_API}/sendMessage", json={
-        "chat_id": chat_id,
-        "text": texto,
-        "parse_mode": "Markdown"
+        "chat_id": chat_id, "text": texto, "parse_mode": "Markdown"
     }, timeout=30)
+
 
 def main():
     print("Bot @IraizozCFO_bot iniciado. Esperando mensajes...")
     offset = None
-
     while True:
         try:
             params = {"timeout": 20, "allowed_updates": ["message"]}
             if offset:
                 params["offset"] = offset
-
             resp = requests.get(f"{TG_API}/getUpdates", params=params, timeout=25).json()
             updates = resp.get("result", [])
 
@@ -286,7 +237,11 @@ def main():
                 chat_id = msg.get("chat", {}).get("id")
                 texto = (msg.get("text") or msg.get("caption") or "").strip()
 
-                # Descargar foto si viene adjunta
+                if texto.lower() in ("/reset", "reset", "nuevo"):
+                    conversation_history.pop(chat_id, None)
+                    tg_send(chat_id, "Historial borrado. ¿Qué necesitas?")
+                    continue
+
                 foto_bytes = None
                 if msg.get("photo"):
                     largest = max(msg["photo"], key=lambda p: p.get("file_size", 0))
@@ -295,16 +250,14 @@ def main():
                 if not chat_id or (not texto and not foto_bytes):
                     continue
 
-                log_txt = texto if texto else "[foto]"
-                print(f"[{chat_id}] {log_txt}")
-                tg_send(chat_id, "⏳ Consultando...")
-
+                print(f"[{chat_id}] {texto or '[foto]'}")
+                tg_send(chat_id, "⏳")
                 try:
-                    respuesta = procesar_mensaje(texto, foto_bytes)
+                    respuesta = procesar_mensaje(chat_id, texto, foto_bytes)
                     tg_send(chat_id, respuesta)
                 except Exception as e:
                     tg_send(chat_id, f"❌ Error: {e}")
-                    print(f"Error: {e}")
+                    print(f"Error procesando: {e}")
 
         except requests.exceptions.Timeout:
             continue
@@ -312,5 +265,20 @@ def main():
             print(f"Error en polling: {e}")
             time.sleep(5)
 
+
 if __name__ == "__main__":
-    main()
+    lockfile = Path(__file__).parent.parent / ".tmp" / "bot.lock"
+    lockfile.parent.mkdir(exist_ok=True)
+    if lockfile.exists():
+        existing_pid = lockfile.read_text().strip()
+        try:
+            os.kill(int(existing_pid), 0)
+            print(f"Bot ya está corriendo (PID {existing_pid}). Saliendo.")
+            sys.exit(0)
+        except (ProcessLookupError, ValueError):
+            pass
+    lockfile.write_text(str(os.getpid()))
+    try:
+        main()
+    finally:
+        lockfile.unlink(missing_ok=True)

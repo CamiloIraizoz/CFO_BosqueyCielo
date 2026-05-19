@@ -5,9 +5,8 @@ Ejecutar en background: nohup python3 execution/shopify_sync.py >> shopify_sync.
 Corre cada 15 minutos. Guarda el ID de la última orden en execution/.last_shopify_order.
 """
 import os
-import json
+import sys
 import time
-import subprocess
 import requests
 from pathlib import Path
 from datetime import datetime
@@ -16,8 +15,8 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path, override=False)
 
-COMPOSIO        = os.path.expanduser("~/.composio/composio")
-SPREADSHEET_ID  = os.getenv("SPREADSHEET_ID")
+sys.path.insert(0, str(Path(__file__).parent))
+from sheets import agregar_fila
 SHOPIFY_TOKEN   = os.getenv("SHOPIFY_TOKEN")
 SHOPIFY_STORE   = os.getenv("SHOPIFY_STORE", "bosqueycielo.myshopify.com")
 LAST_ORDER_FILE = Path(__file__).parent / ".last_shopify_order"
@@ -68,25 +67,9 @@ MESES = {
 }
 
 
-def composio_append(valores: list) -> bool:
-    result = subprocess.run(
-        [COMPOSIO, "execute", "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND", "-d", json.dumps({
-            "spreadsheetId": SPREADSHEET_ID,
-            "range": "Movimientos!A:I",
-            "values": [valores],
-            "valueInputOption": "USER_ENTERED",
-            "insertDataOption": "INSERT_ROWS",
-        })],
-        capture_output=True, text=True, timeout=30
-    )
-    stdout = "\n".join(
-        l for l in result.stdout.splitlines()
-        if "Update available" not in l and "composio upgrade" not in l
-    ).strip()
-    try:
-        return json.loads(stdout).get("successful", False)
-    except Exception:
-        return False
+def sheets_append(valores: list) -> bool:
+    result = agregar_fila("Movimientos!A:J", valores)
+    return "correctamente" in result
 
 
 def order_to_row(order: dict) -> list:
@@ -118,15 +101,10 @@ def order_to_row(order: dict) -> list:
         )[:100]
 
     return [
-        fecha,          # A: Fecha
-        mes,            # B: Mes
-        anio,           # C: Año
-        "Ingreso",      # D: Tipo
-        "Ecommerce",    # E: Categoría
-        descripcion,    # F: Descripción
-        nombre,         # G: Cliente/Proveedor
-        "Shopify",      # H: Método de Pago
-        str(total),     # I: Monto
+        fecha, mes, anio,
+        "Ingreso", "Ecommerce",
+        descripcion, nombre,
+        "Shopify", str(total), ""   # J: Estado vacío
     ]
 
 
@@ -145,7 +123,7 @@ def sync_once():
         if oid <= last_id:
             continue
         row = order_to_row(order)
-        ok  = composio_append(row)
+        ok  = sheets_append(row)
         num = order.get("order_number", oid)
         if ok:
             print(f"[shopify_sync] Orden #{num} registrada → Ecommerce")
