@@ -10,6 +10,7 @@ import time
 import base64
 import requests
 import anthropic
+from datetime import date
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -171,7 +172,7 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                 response = client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=512,
-                    system=SYSTEM_PROMPT,
+                    system=SYSTEM_PROMPT + f"\n\nFECHA HOY: {date.today().strftime('%d/%m/%Y')}",
                     tools=TOOLS,
                     tool_choice=tool_choice,
                     messages=messages
