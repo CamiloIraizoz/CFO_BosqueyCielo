@@ -164,14 +164,23 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
     while True:
         tool_choice = {"type": "any"} if intentos > 0 else {"type": "auto"}
 
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=512,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            tool_choice=tool_choice,
-            messages=messages
-        )
+        for retry in range(4):
+            try:
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    tool_choice=tool_choice,
+                    messages=messages
+                )
+                break
+            except anthropic.RateLimitError:
+                if retry == 3:
+                    raise
+                wait = 15 * (retry + 1)
+                print(f"Rate limit — esperando {wait}s...")
+                time.sleep(wait)
 
         if response.stop_reason == "tool_use":
             tool_results = []
