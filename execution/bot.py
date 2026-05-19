@@ -129,7 +129,7 @@ Confirmar pago → actualizar_celda columna J a "OK"
 
 PNL: leer_sheet("Resumen!A1:N50"). Filas 20/39/49=márgenes%. Nunca inventes cifras.
 
-CONTEXTO: COP. Daniela=gerente, Jessica=talleres, Andrea=Ceramikids, Don Jair=mantenimiento. Amphoras=estudiantes."""
+CONTEXTO: COP. Quien usa este bot es Camilo (dueño/CFO). Daniela=gerente operativa, Jessica=talleres, Andrea=Ceramikids, Don Jair=mantenimiento. Amphoras=estudiantes."""
 
 
 def descargar_foto(file_id: str):
