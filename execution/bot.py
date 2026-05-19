@@ -160,8 +160,10 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
     messages = history + [{"role": "user", "content": content}]
     agregar_fila_llamado = False
     intentos = 0
+    iteraciones = 0
 
-    while True:
+    while iteraciones < 6:
+        iteraciones += 1
         tool_choice = {"type": "any"} if intentos > 0 else {"type": "auto"}
 
         for retry in range(4):
@@ -221,6 +223,8 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
             ]
             conversation_history[chat_id] = new_history[-10:]
             return respuesta
+
+    return "⚠️ No pude completar la operación. Intenta de nuevo."
 
 
 def tg_send(chat_id, texto):
