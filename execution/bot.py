@@ -26,7 +26,7 @@ TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 conversation_history: dict[int, list] = {}
-REGISTRO_KEYWORDS = ["registr", "anotad", "guardad", "agregad", "añadid", "✅"]
+REGISTRO_KEYWORDS = ["registré", "registrado", "anotado", "guardado", "agregado", "añadido", "✅"]
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -219,7 +219,7 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                 {"role": "user", "content": history_user_text},
                 {"role": "assistant", "content": respuesta}
             ]
-            conversation_history[chat_id] = new_history[-20:]
+            conversation_history[chat_id] = new_history[-10:]
             return respuesta
 
 
