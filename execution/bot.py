@@ -27,7 +27,6 @@ TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 conversation_history: dict[int, list] = {}
-REGISTRO_KEYWORDS = ["registré", "registrado", "anotado", "guardado", "agregado", "añadido", "✅"]
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -159,13 +158,10 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
         history_user_text = texto
 
     messages = history + [{"role": "user", "content": content}]
-    agregar_fila_llamado = False
-    intentos = 0
     iteraciones = 0
 
     while iteraciones < 6:
         iteraciones += 1
-        tool_choice = {"type": "any"} if intentos > 0 else {"type": "auto"}
 
         for retry in range(4):
             try:
@@ -174,7 +170,7 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                     max_tokens=512,
                     system=SYSTEM_PROMPT + f"\n\nFECHA HOY: {date.today().strftime('%d/%m/%Y')}",
                     tools=TOOLS,
-                    tool_choice=tool_choice,
+                    tool_choice={"type": "auto"},
                     messages=messages
                 )
                 break
@@ -194,7 +190,6 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         resultado = leer_sheet(inp["rango"])
                     elif name == "agregar_fila":
                         resultado = agregar_fila(inp["rango"], inp["valores"])
-                        agregar_fila_llamado = True
                     elif name == "actualizar_celda":
                         resultado = actualizar_celda(inp["rango"], inp["valor"])
                     elif name == "listar_pestanas":
@@ -206,18 +201,6 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
             messages.append({"role": "user", "content": tool_results})
         else:
             respuesta = next((b.text for b in response.content if hasattr(b, "text")), "Sin respuesta.")
-
-            parece_registro = any(k in respuesta.lower() for k in REGISTRO_KEYWORDS)
-            if parece_registro and not agregar_fila_llamado and intentos == 0:
-                print(f"[{chat_id}] Alucinación detectada — forzando agregar_fila")
-                intentos += 1
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": [{
-                    "type": "text",
-                    "text": "IMPORTANTE: Dijiste que registraste pero NO llamaste agregar_fila. Llama agregar_fila ahora."
-                }]})
-                continue
-
             new_history = history + [
                 {"role": "user", "content": history_user_text},
                 {"role": "assistant", "content": respuesta}
