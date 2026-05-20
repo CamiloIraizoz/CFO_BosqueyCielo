@@ -19,6 +19,8 @@ load_dotenv(env_path, override=False)
 
 sys.path.insert(0, str(Path(__file__).parent))
 from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas
+from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota
+from email_sender import enviar_cotizacion, enviar_cotizacion_pottery
 
 TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -74,6 +76,144 @@ TOOLS = [
         "name": "listar_pestanas",
         "description": "Lista todas las pestañas del Sheet.",
         "input_schema": {"type": "object", "properties": {}}
+    },
+
+    # ── HubSpot CRM ──────────────────────────────────────────────────────────────
+    {
+        "name": "buscar_contacto_hs",
+        "description": "Busca contactos en HubSpot por nombre, empresa o email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Nombre, empresa o email a buscar"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "crear_contacto_hs",
+        "description": "Crea un nuevo contacto en HubSpot.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nombre":   {"type": "string"},
+                "empresa":  {"type": "string"},
+                "email":    {"type": "string"},
+                "telefono": {"type": "string"}
+            },
+            "required": ["nombre", "empresa"]
+        }
+    },
+    {
+        "name": "crear_deal_hs",
+        "description": "Crea un negocio en el pipeline de HubSpot. Etapas: analisis, conceptualizacion, propuesta, ajustes, aprobacion, produccion, entrega, perdido.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nombre_deal": {"type": "string", "description": "Ej: 'Pedido B2B — Empresa XYZ'"},
+                "contacto_id": {"type": "string", "description": "ID del contacto en HubSpot"},
+                "etapa":       {"type": "string", "description": "analisis | conceptualizacion | propuesta | ajustes | aprobacion | produccion | entrega | perdido"},
+                "valor":       {"type": "integer", "description": "Valor estimado en COP"},
+                "descripcion": {"type": "string"}
+            },
+            "required": ["nombre_deal", "etapa"]
+        }
+    },
+    {
+        "name": "actualizar_deal_hs",
+        "description": "Actualiza etapa, valor o notas de un negocio en HubSpot.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "deal_id": {"type": "string"},
+                "etapa":   {"type": "string"},
+                "valor":   {"type": "integer"},
+                "notas":   {"type": "string"}
+            },
+            "required": ["deal_id"]
+        }
+    },
+    {
+        "name": "listar_deals_hs",
+        "description": "Lista negocios del pipeline de HubSpot, opcionalmente filtrados por etapa.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "etapa": {"type": "string", "description": "Filtro opcional: analisis | propuesta | aprobacion | etc."}
+            }
+        }
+    },
+    {
+        "name": "agregar_nota_hs",
+        "description": "Agrega una nota de actividad a un negocio en HubSpot.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "deal_id": {"type": "string"},
+                "nota":    {"type": "string"}
+            },
+            "required": ["deal_id", "nota"]
+        }
+    },
+
+    # ── Cotizaciones / Email ──────────────────────────────────────────────────────
+    {
+        "name": "enviar_cotizacion",
+        "description": "Genera y envía cotización por email al cliente. SOLO llamar después de que el usuario confirme explícitamente el envío. Siempre muestra resumen y espera 'sí, confirmo' antes de llamar.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cliente_nombre":   {"type": "string"},
+                "cliente_empresa":  {"type": "string"},
+                "cliente_email":    {"type": "string", "description": "Email del cliente — requerido"},
+                "cliente_telefono": {"type": "string"},
+                "productos": {
+                    "type": "array",
+                    "description": "Lista de productos cotizados",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "nombre":          {"type": "string"},
+                            "descripcion":     {"type": "string"},
+                            "cantidad":        {"type": "integer"},
+                            "precio_unitario": {"type": "integer"}
+                        },
+                        "required": ["nombre", "cantidad", "precio_unitario"]
+                    }
+                },
+                "envio":            {"type": "integer", "description": "Costo de envío en COP (0 si incluido)"},
+                "notas":            {"type": "string"},
+                "plazo_entrega":    {"type": "string", "description": "Ej: '4-6 semanas hábiles'"},
+                "condiciones_pago": {"type": "string", "description": "Ej: '50% anticipo · 50% contra entrega'"},
+                "fecha":            {"type": "string", "description": "Fecha formato DD/MM/AAAA"}
+            },
+            "required": ["cliente_nombre", "cliente_email", "productos"]
+        }
+    },
+    {
+        "name": "enviar_cotizacion_pottery",
+        "description": "Genera y envía cotización Pottery Lab (talleres/experiencias) por email. SOLO llamar después de confirmación explícita del usuario.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cliente_nombre":   {"type": "string"},
+                "cliente_empresa":  {"type": "string"},
+                "cliente_email":    {"type": "string"},
+                "cliente_telefono": {"type": "string"},
+                "taller_tipo":      {"type": "string", "description": "Tipo de evento: Cumpleaños | Team building | Despedida | Corporativo | etc."},
+                "taller_ejercicio": {"type": "string", "description": "Ej: 'Esmaltado — 1 pieza', 'Torno — pieza libre'"},
+                "taller_lugar":     {"type": "string", "description": "Ubicación: 'Estudio Amphora' o dirección del cliente"},
+                "taller_fecha":     {"type": "string", "description": "Fecha del taller DD/MM/AAAA"},
+                "taller_duracion":  {"type": "string", "description": "Ej: '1.5 horas', '2 horas'"},
+                "taller_participantes":    {"type": "integer"},
+                "taller_precio_por_persona": {"type": "integer", "description": "Precio por persona en COP"},
+                "inclusiones":      {"type": "string", "description": "Qué incluye. Default: materiales + piezas + horneada + entrega"},
+                "condiciones_pago": {"type": "string"},
+                "notas":            {"type": "string"},
+                "fecha":            {"type": "string", "description": "Fecha de emisión DD/MM/AAAA"}
+            },
+            "required": ["cliente_nombre", "cliente_email", "taller_tipo", "taller_participantes", "taller_precio_por_persona"]
+        }
     }
 ]
 
@@ -129,7 +269,57 @@ Confirmar pago → actualizar_celda columna J a "OK"
 
 PNL: leer_sheet("Resumen!A1:N50"). Filas 20/39/49=márgenes%. Nunca inventes cifras.
 
-CONTEXTO: COP. Quien usa este bot es Camilo (dueño/CFO). Daniela=gerente operativa, Jessica=talleres, Andrea=Ceramikids, Don Jair=mantenimiento. Amphoras=estudiantes."""
+CONTEXTO: COP. Quien usa este bot es Camilo (dueño/CFO). Daniela=gerente operativa, Jessica=talleres, Andrea=Ceramikids, Don Jair=mantenimiento. Amphoras=estudiantes.
+
+────────────────────────────────────────
+MÓDULO HUBSPOT — PIPELINE B2B
+────────────────────────────────────────
+ETAPAS (en orden): analisis → conceptualizacion → propuesta → ajustes → aprobacion → produccion → entrega | perdido
+
+FLUJO LEAD NUEVO:
+1. Si el cliente no existe → crear_contacto_hs(nombre, empresa, email, telefono)
+2. crear_deal_hs(nombre_deal, contacto_id, etapa="analisis", valor_estimado)
+3. Confirmar: "Lead [Empresa] creado. Deal ID:[id]"
+
+CONSULTAS HUBSPOT:
+"¿qué leads hay?" / "pipeline" → listar_deals_hs()
+"leads en propuesta" → listar_deals_hs(etapa="propuesta")
+"busca [nombre/empresa]" → buscar_contacto_hs(query)
+"avanza deal [id] a [etapa]" → actualizar_deal_hs(deal_id, etapa)
+
+REGLAS HUBSPOT:
+- NUNCA inventes IDs. Busca primero con buscar_contacto_hs si no tienes el ID.
+- Al crear deal sin contacto_id, pasa contacto_id="" (el deal queda sin asociar).
+- Usa agregar_nota_hs para registrar reuniones, llamadas o acuerdos relevantes.
+
+────────────────────────────────────────
+MÓDULO COTIZACIONES — DOS PLANTILLAS
+────────────────────────────────────────
+HAY DOS TIPOS DE COTIZACIÓN. Detecta cuál usar por el contexto:
+
+🏺 enviar_cotizacion → Bosque y Cielo PRODUCTOS (cerámica, homeware, B2B, personalización)
+   Datos: nombre, empresa, email cliente + lista de productos (nombre, cantidad, precio_unitario) + plazo + condiciones
+
+🎨 enviar_cotizacion_pottery → Pottery Lab EXPERIENCIAS (talleres, cumpleaños, team building, corporativos)
+   Datos: nombre, empresa, email cliente + taller (tipo, ejercicio, lugar, fecha, duración, participantes, precio_por_persona)
+   Total = participantes × precio_por_persona. Anticipo = Total / 2.
+
+FLUJO COTIZACIÓN (aplica a ambas):
+1. Recopila todos los datos. Si falta email → pregunta solo "¿Email del cliente?".
+2. Muestra resumen antes de enviar:
+   "📋 Cotización [Empresa]:
+   [Detalle del pedido o taller]
+   Total: $[total] · Envío a: [email]
+   ¿Confirmo envío?"
+3. SOLO si el usuario dice "sí" → llamar el tool correspondiente.
+4. Confirmar con: ✅ + número generado.
+
+REGLAS:
+- NUNCA enviar sin confirmación explícita.
+- Condiciones default productos: "50% anticipo · 50% contra entrega".
+- Condiciones default pottery: "50% anticipo para reservar · 50% el día del taller".
+- Plazo default productos: "4-6 semanas hábiles".
+- La cotización llega CC a Daniela y Camilo automáticamente."""
 
 
 def descargar_foto(file_id: str):
@@ -194,6 +384,68 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         resultado = actualizar_celda(inp["rango"], inp["valor"])
                     elif name == "listar_pestanas":
                         resultado = listar_pestanas()
+                    # ── HubSpot ──────────────────────────────────────────────
+                    elif name == "buscar_contacto_hs":
+                        resultado = buscar_contacto(inp["query"])
+                    elif name == "crear_contacto_hs":
+                        resultado = crear_contacto(
+                            inp["nombre"], inp["empresa"],
+                            inp.get("email", ""), inp.get("telefono", "")
+                        )
+                    elif name == "crear_deal_hs":
+                        resultado = crear_deal(
+                            inp["nombre_deal"], inp.get("contacto_id", ""),
+                            inp["etapa"], inp.get("valor", 0), inp.get("descripcion", "")
+                        )
+                    elif name == "actualizar_deal_hs":
+                        resultado = actualizar_deal(
+                            inp["deal_id"], inp.get("etapa", ""),
+                            inp.get("valor"), inp.get("notas", "")
+                        )
+                    elif name == "listar_deals_hs":
+                        resultado = listar_deals(inp.get("etapa", ""))
+                    elif name == "agregar_nota_hs":
+                        resultado = agregar_nota(inp["deal_id"], inp["nota"])
+                    # ── Cotizaciones / Email ──────────────────────────────────
+                    elif name == "enviar_cotizacion":
+                        datos = {
+                            "cliente": {
+                                "nombre":   inp.get("cliente_nombre", ""),
+                                "empresa":  inp.get("cliente_empresa", ""),
+                                "email":    inp.get("cliente_email", ""),
+                                "telefono": inp.get("cliente_telefono", ""),
+                            },
+                            "productos":        inp.get("productos", []),
+                            "envio":            inp.get("envio", 0),
+                            "notas":            inp.get("notas", ""),
+                            "plazo_entrega":    inp.get("plazo_entrega", "4-6 semanas hábiles"),
+                            "condiciones_pago": inp.get("condiciones_pago", "50% anticipo · 50% contra entrega"),
+                            "fecha":            inp.get("fecha", date.today().strftime("%d/%m/%Y")),
+                        }
+                        resultado = enviar_cotizacion(datos)
+                    elif name == "enviar_cotizacion_pottery":
+                        datos = {
+                            "cliente": {
+                                "nombre":   inp.get("cliente_nombre", ""),
+                                "empresa":  inp.get("cliente_empresa", ""),
+                                "email":    inp.get("cliente_email", ""),
+                                "telefono": inp.get("cliente_telefono", ""),
+                            },
+                            "taller": {
+                                "tipo":             inp.get("taller_tipo", ""),
+                                "ejercicio":        inp.get("taller_ejercicio", ""),
+                                "lugar":            inp.get("taller_lugar", ""),
+                                "fecha_taller":     inp.get("taller_fecha", ""),
+                                "duracion":         inp.get("taller_duracion", ""),
+                                "participantes":    inp.get("taller_participantes", 1),
+                                "precio_por_persona": inp.get("taller_precio_por_persona", 0),
+                            },
+                            "inclusiones":      inp.get("inclusiones", ""),
+                            "condiciones_pago": inp.get("condiciones_pago", "50% anticipo para reservar · 50% el día del taller"),
+                            "notas":            inp.get("notas", ""),
+                            "fecha":            inp.get("fecha", date.today().strftime("%d/%m/%Y")),
+                        }
+                        resultado = enviar_cotizacion_pottery(datos)
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
