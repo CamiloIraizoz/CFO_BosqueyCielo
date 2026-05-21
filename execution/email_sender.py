@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 """
 Cotizaciones y email para Bosque y Cielo.
-Env vars requeridas: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+Env var requerida: RESEND_API_KEY
 """
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import requests as _requests
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "hola@bosqueycielo.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_URL     = "https://api.resend.com/emails"
 
-FROM_EMAIL = "hola@bosqueycielo.com"
+FROM_EMAIL = "Bosque y Cielo <hola@bosqueycielo.com>"
 CC_EMAILS  = ["daniela.sandoval@bosqueycielo.com", "camilo.iraizoz@gmail.com"]
+
+
+def _send(to_email: str, subject: str, html: str) -> str:
+    """Envía un email via Resend API."""
+    if not RESEND_API_KEY:
+        return "Error: RESEND_API_KEY no configurado."
+    resp = _requests.post(
+        RESEND_URL,
+        headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+        json={"from": FROM_EMAIL, "to": [to_email], "cc": CC_EMAILS, "subject": subject, "html": html},
+        timeout=15,
+    )
+    if resp.status_code in (200, 201):
+        return resp.json().get("id", "ok")
+    return f"Error Resend {resp.status_code}: {resp.text}"
 
 
 def _fmt(value) -> str:
@@ -378,37 +389,19 @@ def enviar_cotizacion_pottery(datos: dict) -> str:
     numero = datos.get("numero") or f"PL-{str(__import__('time').time_ns())[-6:]}"
     datos["numero"] = numero
 
-    taller = datos.get("taller", {})
-    total  = int(taller.get("participantes", 1)) * int(float(taller.get("precio_por_persona", 0)))
-
-    html_body = generar_html_cotizacion_pottery(datos)
-
+    taller  = datos.get("taller", {})
+    total   = int(taller.get("participantes", 1)) * int(float(taller.get("precio_por_persona", 0)))
     empresa = cliente.get("empresa") or cliente.get("nombre", "")
     asunto  = f"Cotización Pottery Lab — {empresa} ({numero})"
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = asunto
-    msg["From"]    = f"Pottery Lab · Bosque y Cielo <{FROM_EMAIL}>"
-    msg["To"]      = to_email
-    msg["Cc"]      = ", ".join(CC_EMAILS)
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(FROM_EMAIL, [to_email] + CC_EMAILS, msg.as_string())
-        return f"✅ Cotización Pottery Lab {numero} enviada a {to_email} · Total: {_fmt(total)}"
-    except Exception as e:
-        return f"Error enviando cotización: {e}"
+    result = _send(to_email, asunto, generar_html_cotizacion_pottery(datos))
+    if result.startswith("Error"):
+        return result
+    return f"✅ Cotización Pottery Lab {numero} enviada a {to_email} · Total: {_fmt(total)}"
 
 
 def enviar_cotizacion(datos: dict) -> str:
-    """Envía la cotización por email. Requiere SMTP_PASS en .env."""
-    if not SMTP_PASS:
-        return "Error: SMTP_PASS no configurado en .env"
-
+    """Envía cotización Bosque y Cielo (productos) por email via Resend."""
     cliente  = datos.get("cliente", {})
     to_email = cliente.get("email", "").strip()
     if not to_email:
@@ -417,30 +410,15 @@ def enviar_cotizacion(datos: dict) -> str:
     numero = datos.get("numero") or _numero()
     datos["numero"] = numero
 
-    html_body = generar_html_cotizacion(datos)
-
     productos = datos.get("productos", [])
     total = sum(
         int(float(p.get("precio_unitario", 0))) * int(p.get("cantidad", 1))
         for p in productos
     ) + int(float(datos.get("envio", 0) or 0))
-
     empresa = cliente.get("empresa") or cliente.get("nombre", "")
     asunto  = f"Cotización Bosque y Cielo — {empresa} ({numero})"
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = asunto
-    msg["From"]    = f"Bosque y Cielo <{FROM_EMAIL}>"
-    msg["To"]      = to_email
-    msg["Cc"]      = ", ".join(CC_EMAILS)
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(FROM_EMAIL, [to_email] + CC_EMAILS, msg.as_string())
-        return f"✅ Cotización {numero} enviada a {to_email} · Total: {_fmt(total)}"
-    except Exception as e:
-        return f"Error enviando cotización: {e}"
+    result = _send(to_email, asunto, generar_html_cotizacion(datos))
+    if result.startswith("Error"):
+        return result
+    return f"✅ Cotización {numero} enviada a {to_email} · Total: {_fmt(total)}"
