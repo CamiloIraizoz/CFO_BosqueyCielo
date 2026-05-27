@@ -378,8 +378,8 @@ def generar_html_cotizacion_pottery(datos: dict) -> str:
 
 def enviar_cotizacion_pottery(datos: dict) -> str:
     """Envía cotización Pottery Lab (experiencias) por email."""
-    if not SMTP_PASS:
-        return "Error: SMTP_PASS no configurado en .env"
+    if not RESEND_API_KEY:
+        return "Error: RESEND_API_KEY no configurado en .env"
 
     cliente  = datos.get("cliente", {})
     to_email = cliente.get("email", "").strip()

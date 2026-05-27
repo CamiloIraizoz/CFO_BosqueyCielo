@@ -82,3 +82,43 @@ def listar_pestanas() -> str:
         return ", ".join(names)
     except Exception as e:
         return f"Error: {e}"
+
+
+def crear_pestana(titulo: str) -> str:
+    try:
+        _service().spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": [{"addSheet": {"properties": {"title": titulo}}}]}
+        ).execute()
+        return f"Pestaña '{titulo}' creada."
+    except Exception as e:
+        if "already exists" in str(e):
+            return f"Pestaña '{titulo}' ya existe."
+        return f"Error: {e}"
+
+
+def leer_sheet_numericos(rango: str) -> list:
+    """Retorna valores crudos (números como float/int, texto como string) — UNFORMATTED_VALUE."""
+    try:
+        result = _service().spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=rango,
+            valueRenderOption="UNFORMATTED_VALUE"
+        ).execute()
+        return result.get("values", [])
+    except Exception as e:
+        return []
+
+
+def escribir_rango(rango: str, filas: list) -> str:
+    """Escribe múltiples filas de una vez (más eficiente que agregar_fila en loop)."""
+    try:
+        _service().spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=rango,
+            valueInputOption="USER_ENTERED",
+            body={"values": filas}
+        ).execute()
+        return f"{len(filas)} filas escritas en {rango}."
+    except Exception as e:
+        return f"Error: {e}"

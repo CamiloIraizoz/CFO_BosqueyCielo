@@ -10,7 +10,7 @@ import time
 import base64
 import requests
 import anthropic
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -21,14 +21,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas
 from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery
+from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 
 TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ADMIN_CHAT_ID     = os.getenv("ADMIN_CHAT_ID")
 TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 conversation_history: dict[int, list] = {}
+
+_MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+             "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+_ultima_check_recordatorio = 0.0
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -469,6 +475,60 @@ def tg_send(chat_id, texto):
     }, timeout=30)
 
 
+# ── Recordatorios programados ─────────────────────────────────────────────────
+
+def _leer_ultimo_recordatorio() -> str:
+    try:
+        val = leer_sheet("Amphoritas!B17")
+        return val.strip() if not val.startswith("(rango") else ""
+    except Exception:
+        return ""
+
+def _guardar_ultimo_recordatorio(mes_str: str):
+    try:
+        actualizar_celda("Amphoritas!A17", "_ultimo_recordatorio")
+        actualizar_celda("Amphoritas!B17", mes_str)
+    except Exception as e:
+        print(f"[Recordatorio] Error guardando estado: {e}")
+
+def verificar_recordatorios():
+    global _ultima_check_recordatorio
+    ahora = time.time()
+    if ahora - _ultima_check_recordatorio < 3600:
+        return
+    _ultima_check_recordatorio = ahora
+
+    hoy = datetime.now()
+    if hoy.day < 10:
+        return
+
+    mes_str = f"{_MESES_ES[hoy.month]} {hoy.year}"
+    if _leer_ultimo_recordatorio() == mes_str:
+        return
+
+    print(f"[Recordatorio] Iniciando envío {mes_str}...")
+    try:
+        amphoritas = leer_amphoritas()
+        pagados    = leer_pagos_mes(hoy.month, hoy.year)
+        pendientes = [a for a in amphoritas if not ya_pago(a["nombre"], pagados)]
+
+        enviados = 0
+        for a in pendientes:
+            if _enviar_recordatorio(a["nombre"], a["email"], mes_str,
+                                    a["mensualidad"], dry_run=False):
+                enviados += 1
+
+        _guardar_ultimo_recordatorio(mes_str)
+        print(f"[Recordatorio] {enviados}/{len(pendientes)} enviados — {mes_str}")
+
+        if ADMIN_CHAT_ID and pendientes:
+            lista = "\n".join(f"• {a['nombre']}" for a in pendientes)
+            tg_send(int(ADMIN_CHAT_ID),
+                    f"📧 Recordatorios {mes_str}: {enviados} emails enviados.\n{lista}")
+    except Exception as e:
+        print(f"[Recordatorio] Error: {e}")
+
+
 def main():
     print("Bot @IraizozCFO_bot iniciado. Esperando mensajes...")
     offset = None
@@ -491,6 +551,10 @@ def main():
                     tg_send(chat_id, "Historial borrado. ¿Qué necesitas?")
                     continue
 
+                if texto.lower() == "/chatid":
+                    tg_send(chat_id, f"Tu chat ID es: `{chat_id}`")
+                    continue
+
                 foto_bytes = None
                 if msg.get("photo"):
                     largest = max(msg["photo"], key=lambda p: p.get("file_size", 0))
@@ -509,10 +573,12 @@ def main():
                     print(f"Error procesando: {e}")
 
         except requests.exceptions.Timeout:
-            continue
+            pass
         except Exception as e:
             print(f"Error en polling: {e}")
             time.sleep(5)
+
+        verificar_recordatorios()
 
 
 if __name__ == "__main__":
