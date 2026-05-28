@@ -25,7 +25,8 @@ from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, en
 
 TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-ADMIN_CHAT_ID     = os.getenv("ADMIN_CHAT_ID")
+ADMIN_CHAT_ID            = os.getenv("ADMIN_CHAT_ID")
+PRODUCTION_GROUP_CHAT_ID = os.getenv("PRODUCTION_GROUP_CHAT_ID")
 TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -35,6 +36,7 @@ conversation_history: dict[int, list] = {}
 _MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
              "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 _ultima_check_recordatorio = 0.0
+_ultima_check_entregas     = 0.0
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -220,6 +222,42 @@ TOOLS = [
             },
             "required": ["cliente_nombre", "cliente_email", "taller_tipo", "taller_participantes", "taller_precio_por_persona"]
         }
+    },
+
+    # ── Producción ───────────────────────────────────────────────────────────────
+    {
+        "name": "agregar_pedido_produccion",
+        "description": "Registra un nuevo pedido en la pestaña Producción. Llamar cuando un deal pasa a producción o Daniela confirma inicio.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cliente":       {"type": "string"},
+                "descripcion":   {"type": "string", "description": "Ej: '20 tazas logo empresa'"},
+                "proceso":       {"type": "integer", "description": "1=Clásico (modelado→entregado) | 2=Bizcocho (esmaltado inicial→entregado)"},
+                "fecha_entrega": {"type": "string", "description": "DD/MM/YYYY"},
+                "deal_id":       {"type": "string"},
+                "notas":         {"type": "string"}
+            },
+            "required": ["cliente", "descripcion", "proceso", "fecha_entrega"]
+        }
+    },
+    {
+        "name": "actualizar_etapa_produccion",
+        "description": "Actualiza la etapa de producción de un pedido. Llamar cuando Daniela informa avance.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cliente": {"type": "string"},
+                "etapa":   {"type": "string", "description": "Proceso 1: modelado|secado|primera quema|esmaltado|segunda quema|acabado|empaque|entregado · Proceso 2: esmaltado inicial|pintar bizcocho|primera quema|acabado|empaque|entregado"},
+                "notas":   {"type": "string"}
+            },
+            "required": ["cliente", "etapa"]
+        }
+    },
+    {
+        "name": "leer_produccion",
+        "description": "Lee el estado actual de todos los pedidos en producción.",
+        "input_schema": {"type": "object", "properties": {}}
     }
 ]
 
@@ -325,7 +363,31 @@ REGLAS:
 - Condiciones default productos: "50% anticipo · 50% contra entrega".
 - Condiciones default pottery: "50% anticipo para reservar · 50% el día del taller".
 - Plazo default productos: "4-6 semanas hábiles".
-- La cotización llega CC a Daniela y Camilo automáticamente."""
+- La cotización llega CC a Daniela y Camilo automáticamente.
+
+────────────────────────────────────────
+MÓDULO PRODUCCIÓN — DOS PROCESOS
+────────────────────────────────────────
+PROCESO 1 (Clásico):  modelado → secado → primera quema → esmaltado → segunda quema → acabado → empaque → entregado
+PROCESO 2 (Bizcocho): esmaltado inicial → pintar bizcocho → primera quema → acabado → empaque → entregado
+
+FLUJO NUEVO PEDIDO:
+- Deal pasa a "produccion" o Daniela confirma inicio → agregar_pedido_produccion
+- Etapa inicial automática: Proceso 1→modelado | Proceso 2→esmaltado inicial
+- Confirmar: "Pedido [cliente] registrado · Proceso [N] · Entrega [fecha]"
+
+ACTUALIZAR (comandos de Daniela):
+"avanza [cliente] a [etapa]" | "[cliente] ya está en [etapa]" | "listo el [etapa] de [cliente]"
+→ actualizar_etapa_produccion(cliente, etapa)
+Si etapa="entregado" y hay deal_id → también actualizar_deal_hs(deal_id, etapa="entrega")
+
+CONSULTAS:
+"¿qué entrega esta semana?" | "¿en qué está [cliente]?" | "¿qué hay en producción?"
+→ leer_produccion + filtrar según pregunta · mostrar: cliente · etapa · fecha entrega
+
+REGLAS:
+- NUNCA marcar entregado sin confirmación explícita.
+- Daniela habla operativamente: mensajes cortos son comandos de producción."""
 
 
 def descargar_foto(file_id: str):
@@ -452,6 +514,19 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             "fecha":            inp.get("fecha", date.today().strftime("%d/%m/%Y")),
                         }
                         resultado = enviar_cotizacion_pottery(datos)
+                    # ── Producción ───────────────────────────────────────────
+                    elif name == "agregar_pedido_produccion":
+                        resultado = _prod_agregar(
+                            inp["cliente"], inp["descripcion"],
+                            inp.get("proceso", 1), inp["fecha_entrega"],
+                            inp.get("deal_id", ""), inp.get("notas", "")
+                        )
+                    elif name == "actualizar_etapa_produccion":
+                        resultado = _prod_actualizar(
+                            inp["cliente"], inp["etapa"], inp.get("notas", "")
+                        )
+                    elif name == "leer_produccion":
+                        resultado = leer_sheet("Producción!A:J")
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
@@ -476,6 +551,87 @@ def tg_send(chat_id, texto):
 
 
 # ── Recordatorios programados ─────────────────────────────────────────────────
+
+def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", notas=""):
+    filas = leer_sheet_numericos("Producción!A:A")
+    num = max(len(filas), 1)
+    etapa_inicial = "modelado" if int(proceso) == 1 else "esmaltado inicial"
+    hoy = datetime.now().strftime("%d/%m/%Y")
+    row = [num, cliente, descripcion, deal_id, proceso, hoy, fecha_entrega, etapa_inicial, hoy, notas]
+    return agregar_fila("Producción!A:J", row)
+
+
+def _prod_actualizar(cliente, etapa, notas=""):
+    filas = leer_sheet_numericos("Producción!A:J")
+    for i, fila in enumerate(filas[1:], start=2):
+        nombre = str(fila[1]).strip().lower() if len(fila) > 1 else ""
+        if cliente.lower() in nombre or nombre in cliente.lower():
+            hoy = datetime.now().strftime("%d/%m/%Y")
+            actualizar_celda(f"Producción!H{i}", etapa)
+            actualizar_celda(f"Producción!I{i}", hoy)
+            if notas:
+                actualizar_celda(f"Producción!J{i}", notas)
+            return f"✅ {str(fila[1]).strip()} actualizado a '{etapa}'."
+    return f"No encontré pedido de '{cliente}' en producción."
+
+
+def verificar_entregas_proximas():
+    global _ultima_check_entregas
+    ahora = time.time()
+    if ahora - _ultima_check_entregas < 3600 * 6:
+        return
+    _ultima_check_entregas = ahora
+
+    if not PRODUCTION_GROUP_CHAT_ID:
+        return
+
+    try:
+        filas = leer_sheet_numericos("Producción!A:J")
+        hoy = datetime.now().date()
+        alertas_entrega = []
+        alertas_stall   = []
+
+        for fila in filas[1:]:
+            if len(fila) < 8:
+                continue
+            cliente = str(fila[1]).strip() if len(fila) > 1 else "?"
+            etapa   = str(fila[7]).strip().lower() if len(fila) > 7 else ""
+            if etapa in ("entregado", ""):
+                continue
+
+            # Entrega próxima (≤3 días)
+            fecha_str = str(fila[6]).strip() if len(fila) > 6 else ""
+            if "/" in fecha_str:
+                try:
+                    p = fecha_str.split("/")
+                    fecha_e = date(int(p[2]), int(p[1]), int(p[0]))
+                    dias = (fecha_e - hoy).days
+                    if 0 <= dias <= 3:
+                        alertas_entrega.append(f"• {cliente} — {dias}d ({fecha_str}) · {fila[7]}")
+                except Exception:
+                    pass
+
+            # Stall: +14 días sin actualización
+            ult_str = str(fila[8]).strip() if len(fila) > 8 else ""
+            if "/" in ult_str:
+                try:
+                    p = ult_str.split("/")
+                    ult = date(int(p[2]), int(p[1]), int(p[0]))
+                    if (hoy - ult).days >= 14:
+                        alertas_stall.append(f"• {cliente} · sin actualizar hace {(hoy - ult).days}d · {fila[7]}")
+                except Exception:
+                    pass
+
+        msg = ""
+        if alertas_entrega:
+            msg += "⚠️ *Entregas próximas (≤3 días):*\n" + "\n".join(alertas_entrega) + "\n\n"
+        if alertas_stall:
+            msg += "🔴 *Pedidos sin actualizar (+14 días):*\n" + "\n".join(alertas_stall)
+        if msg:
+            tg_send(int(PRODUCTION_GROUP_CHAT_ID), msg.strip())
+    except Exception as e:
+        print(f"[Entregas] Error: {e}")
+
 
 def _leer_ultimo_recordatorio() -> str:
     try:
@@ -579,6 +735,7 @@ def main():
             time.sleep(5)
 
         verificar_recordatorios()
+        verificar_entregas_proximas()
 
 
 if __name__ == "__main__":
