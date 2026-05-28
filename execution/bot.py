@@ -120,7 +120,7 @@ TOOLS = [
             "properties": {
                 "nombre_deal": {"type": "string", "description": "Ej: 'Pedido B2B — Empresa XYZ'"},
                 "contacto_id": {"type": "string", "description": "ID del contacto en HubSpot"},
-                "etapa":       {"type": "string", "description": "analisis | conceptualizacion | propuesta | ajustes | aprobacion | produccion | entrega | perdido"},
+                "etapa":       {"type": "string", "description": "prospecto | cotizacion | negociacion | anticipo_recibido | en_produccion | listo_entrega | entregado | perdido"},
                 "valor":       {"type": "integer", "description": "Valor estimado en COP"},
                 "descripcion": {"type": "string"}
             },
@@ -318,18 +318,19 @@ CONTEXTO: COP. Quien usa este bot es Camilo (dueño/CFO). Daniela=gerente operat
 ────────────────────────────────────────
 MÓDULO HUBSPOT — PIPELINE B2B
 ────────────────────────────────────────
-ETAPAS (en orden): analisis → conceptualizacion → propuesta → ajustes → aprobacion → produccion → entrega | perdido
+ETAPAS (en orden): prospecto → cotizacion → negociacion → anticipo_recibido → en_produccion → listo_entrega → entregado | perdido
 
 FLUJO LEAD NUEVO:
 1. Si el cliente no existe → crear_contacto_hs(nombre, empresa, email, telefono)
-2. crear_deal_hs(nombre_deal, contacto_id, etapa="analisis", valor_estimado)
+2. crear_deal_hs(nombre_deal, contacto_id, etapa="prospecto", valor_estimado)
 3. Confirmar: "Lead [Empresa] creado. Deal ID:[id]"
 
 CONSULTAS HUBSPOT:
 "¿qué leads hay?" / "pipeline" → listar_deals_hs()
-"leads en propuesta" → listar_deals_hs(etapa="propuesta")
+"leads en cotizacion" → listar_deals_hs(etapa="cotizacion")
 "busca [nombre/empresa]" → buscar_contacto_hs(query)
 "avanza deal [id] a [etapa]" → actualizar_deal_hs(deal_id, etapa)
+Cuando deal llega a "anticipo_recibido" → recordar crear pedido en producción con agregar_pedido_produccion
 
 REGLAS HUBSPOT:
 - NUNCA inventes IDs. Busca primero con buscar_contacto_hs si no tienes el ID.

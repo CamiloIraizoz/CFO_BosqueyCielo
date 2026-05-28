@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 HubSpot CRM integration para Amphora B&C.
-Pipeline: Analisis de Viabilidad → Conceptualización → Presentación Propuesta
-          → Ajustes → Aprobacion → Produccion → Entrega | Cierre perdido
+Pipeline: Prospecto → Cotización → Negociación → Anticipo Recibido
+          → En Producción → Listo para Entrega → Entregado | Perdido
 """
 import os
 import requests
@@ -16,14 +16,14 @@ BASE_URL  = "https://api.hubapi.com"
 
 PIPELINE_ID = "default"
 STAGES = {
-    "analisis":      "appointmentscheduled",
-    "conceptualizacion": "qualifiedtobuy",
-    "propuesta":     "presentationscheduled",
-    "ajustes":       "decisionmakerboughtin",
-    "aprobacion":    "contractsent",
-    "produccion":    "stage_0",
-    "entrega":       "closedwon",
-    "perdido":       "closedlost",
+    "prospecto":         "appointmentscheduled",
+    "cotizacion":        "qualifiedtobuy",
+    "negociacion":       "presentationscheduled",
+    "anticipo_recibido": "decisionmakerboughtin",
+    "en_produccion":     "contractsent",
+    "listo_entrega":     "stage_0",
+    "entregado":         "closedwon",
+    "perdido":           "closedlost",
 }
 STAGE_LABELS = {v: k for k, v in STAGES.items()}
 
