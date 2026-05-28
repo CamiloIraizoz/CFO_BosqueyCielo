@@ -16,14 +16,14 @@ BASE_URL  = "https://api.hubapi.com"
 
 PIPELINE_ID = "default"
 STAGES = {
-    "prospecto":         "appointmentscheduled",
+    "lead":              "appointmentscheduled",
     "cotizacion":        "qualifiedtobuy",
     "negociacion":       "presentationscheduled",
     "anticipo_recibido": "decisionmakerboughtin",
     "en_produccion":     "contractsent",
     "listo_entrega":     "stage_0",
     "entregado":         "closedwon",
-    "perdido":           "closedlost",
+    "lost":              "closedlost",
 }
 STAGE_LABELS = {v: k for k, v in STAGES.items()}
 

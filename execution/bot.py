@@ -120,7 +120,7 @@ TOOLS = [
             "properties": {
                 "nombre_deal": {"type": "string", "description": "Ej: 'Pedido B2B — Empresa XYZ'"},
                 "contacto_id": {"type": "string", "description": "ID del contacto en HubSpot"},
-                "etapa":       {"type": "string", "description": "prospecto | cotizacion | negociacion | anticipo_recibido | en_produccion | listo_entrega | entregado | perdido"},
+                "etapa":       {"type": "string", "description": "lead | cotizacion | negociacion | anticipo_recibido | en_produccion | listo_entrega | entregado | lost"},
                 "valor":       {"type": "integer", "description": "Valor estimado en COP"},
                 "descripcion": {"type": "string"}
             },
@@ -318,11 +318,11 @@ CONTEXTO: COP. Quien usa este bot es Camilo (dueño/CFO). Daniela=gerente operat
 ────────────────────────────────────────
 MÓDULO HUBSPOT — PIPELINE B2B
 ────────────────────────────────────────
-ETAPAS (en orden): prospecto → cotizacion → negociacion → anticipo_recibido → en_produccion → listo_entrega → entregado | perdido
+ETAPAS (en orden): lead → cotizacion → negociacion → anticipo_recibido → en_produccion → listo_entrega → entregado | lost
 
 FLUJO LEAD NUEVO:
 1. Si el cliente no existe → crear_contacto_hs(nombre, empresa, email, telefono)
-2. crear_deal_hs(nombre_deal, contacto_id, etapa="prospecto", valor_estimado)
+2. crear_deal_hs(nombre_deal, contacto_id, etapa="lead", valor_estimado)
 3. Confirmar: "Lead [Empresa] creado. Deal ID:[id]"
 
 CONSULTAS HUBSPOT:
