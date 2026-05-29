@@ -18,7 +18,7 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path, override=False)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas
+from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas, leer_sheet_numericos
 from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
@@ -37,6 +37,7 @@ _MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
              "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 _ultima_check_recordatorio = 0.0
 _ultima_check_entregas     = 0.0
+_ultima_check_semanal      = 0.0
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -258,6 +259,13 @@ TOOLS = [
         "name": "leer_produccion",
         "description": "Lee el estado actual de todos los pedidos en producción.",
         "input_schema": {"type": "object", "properties": {}}
+    },
+
+    # ── Flujo de caja ────────────────────────────────────────────────────────────
+    {
+        "name": "reporte_flujo_caja",
+        "description": "Genera reporte de flujo de caja: proyectado vs real del mes actual. Llamar ante cualquier pregunta sobre cómo van las finanzas, el presupuesto o el flujo.",
+        "input_schema": {"type": "object", "properties": {}}
     }
 ]
 
@@ -388,7 +396,14 @@ CONSULTAS:
 
 REGLAS:
 - NUNCA marcar entregado sin confirmación explícita.
-- Daniela habla operativamente: mensajes cortos son comandos de producción."""
+- Daniela habla operativamente: mensajes cortos son comandos de producción.
+
+────────────────────────────────────────
+MÓDULO FLUJO DE CAJA
+────────────────────────────────────────
+"flujo de caja" | "¿cómo vamos?" | "proyectado vs real" | "presupuesto" → reporte_flujo_caja()
+Muestra ingresos y egresos reales vs proyectados del mes con % de avance por categoría.
+El reporte llega automáticamente cada lunes."""
 
 
 def descargar_foto(file_id: str):
@@ -528,6 +543,8 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         )
                     elif name == "leer_produccion":
                         resultado = leer_sheet("Producción!A:J")
+                    elif name == "reporte_flujo_caja":
+                        resultado = _generar_reporte_flujo()
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
@@ -552,6 +569,127 @@ def tg_send(chat_id, texto):
 
 
 # ── Recordatorios programados ─────────────────────────────────────────────────
+
+def _generar_reporte_flujo(mes_num=None, anio=None):
+    from datetime import timedelta as _td
+    hoy = datetime.now()
+    if mes_num is None: mes_num = hoy.month
+    if anio is None:    anio    = hoy.year
+
+    presup = leer_sheet_numericos("Presupuesto 2026!A:I")
+    if not presup:
+        return "Sin datos en Presupuesto 2026."
+
+    header = presup[0] if presup else []
+    mes_col = None
+    meses_short = {"ene":1,"feb":2,"mar":3,"abr":4,"may":5,"jun":6,
+                   "jul":7,"ago":8,"sep":9,"oct":10,"nov":11,"dic":12}
+    for i, h in enumerate(header):
+        if isinstance(h, (int, float)):
+            try:
+                d = date(1899, 12, 30) + _td(days=int(h))
+                if d.month == mes_num and d.year == anio:
+                    mes_col = i
+                    break
+            except Exception:
+                pass
+        elif isinstance(h, str) and str(anio) in h:
+            if meses_short.get(h[:3].lower()) == mes_num:
+                mes_col = i
+                break
+
+    if mes_col is None:
+        return f"No encontré columna para {_MESES_ES[mes_num]} {anio} en Presupuesto 2026."
+
+    proyectado = {}
+    for fila in presup[1:]:
+        if len(fila) <= mes_col:
+            continue
+        tipo = str(fila[0]).strip().upper()
+        cat  = str(fila[1]).strip()
+        if tipo not in ("INGRESO", "EGRESO") or not cat:
+            continue
+        if "TOTAL" in cat.upper() or "──" in cat:
+            continue
+        try:
+            proyectado[(tipo, cat)] = float(fila[mes_col] or 0)
+        except (ValueError, TypeError):
+            proyectado[(tipo, cat)] = 0.0
+
+    movs = leer_sheet_numericos("Movimientos!A:J")
+    real = {}
+    mes_nombres = {m.lower(): i for i, m in enumerate(_MESES_ES) if i > 0}
+    for fila in movs[1:]:
+        if len(fila) < 9:
+            continue
+        try:
+            mes_v = mes_nombres.get(str(fila[1]).strip().lower(), 0)
+            año_v = int(float(fila[2])) if fila[2] else 0
+            if mes_v != mes_num or año_v != anio:
+                continue
+            tipo  = str(fila[3]).strip().upper()
+            cat   = str(fila[4]).strip()
+            monto = float(fila[8]) if fila[8] else 0
+            real[(tipo, cat)] = real.get((tipo, cat), 0) + monto
+        except Exception:
+            continue
+
+    def fmt(n):
+        return f"${n/1_000_000:.1f}M" if abs(n) >= 1_000_000 else f"${n:,.0f}"
+
+    total_ing_p = total_ing_r = 0
+    total_egr_p = total_egr_r = 0
+    lines_ing = []
+    lines_egr = []
+
+    for (tipo, cat), proy in sorted(proyectado.items(), key=lambda x: x[0][1]):
+        act = real.get((tipo, cat), 0)
+        if proy == 0 and act == 0:
+            continue
+        pct = int(act / proy * 100) if proy > 0 else (100 if act > 0 else 0)
+        ico = "✅" if pct >= 90 else ("⚠️" if pct >= 50 else "🔴")
+        line = f"  {ico} {cat}: {fmt(act)} / {fmt(proy)} ({pct}%)"
+        if tipo == "INGRESO":
+            lines_ing.append(line)
+            total_ing_p += proy
+            total_ing_r += act
+        else:
+            lines_egr.append(line)
+            total_egr_p += proy
+            total_egr_r += act
+
+    flujo_r = total_ing_r - total_egr_r
+    flujo_p = total_ing_p - total_egr_p
+    semana  = (hoy.day - 1) // 7 + 1
+
+    msg  = f"📊 *Flujo de Caja — {_MESES_ES[mes_num]} {anio}* (semana {semana})\n\n"
+    msg += f"💰 *INGRESOS* {fmt(total_ing_r)} / {fmt(total_ing_p)}\n"
+    msg += "\n".join(lines_ing) + "\n\n"
+    msg += f"💸 *EGRESOS* {fmt(total_egr_r)} / {fmt(total_egr_p)}\n"
+    msg += "\n".join(lines_egr) + "\n\n"
+    ico_neto = "✅" if flujo_r >= flujo_p * 0.9 else ("⚠️" if flujo_r >= 0 else "🔴")
+    msg += f"{ico_neto} *Flujo neto: {fmt(flujo_r)}* (proy: {fmt(flujo_p)})"
+    return msg
+
+
+def verificar_reporte_semanal():
+    global _ultima_check_semanal
+    ahora = time.time()
+    if ahora - _ultima_check_semanal < 3600 * 6:
+        return
+    _ultima_check_semanal = ahora
+    hoy = datetime.now()
+    if hoy.weekday() != 0:  # Solo lunes
+        return
+    if not ADMIN_CHAT_ID:
+        return
+    try:
+        reporte = _generar_reporte_flujo()
+        tg_send(int(ADMIN_CHAT_ID), reporte)
+        print(f"[Reporte semanal] Enviado — {hoy.strftime('%d/%m/%Y')}")
+    except Exception as e:
+        print(f"[Reporte semanal] Error: {e}")
+
 
 def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", notas=""):
     filas = leer_sheet_numericos("Producción!A:A")
@@ -737,6 +875,7 @@ def main():
 
         verificar_recordatorios()
         verificar_entregas_proximas()
+        verificar_reporte_semanal()
 
 
 if __name__ == "__main__":
