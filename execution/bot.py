@@ -266,6 +266,18 @@ TOOLS = [
         "name": "reporte_flujo_caja",
         "description": "Genera reporte de flujo de caja: proyectado vs real del mes actual. Llamar ante cualquier pregunta sobre cómo van las finanzas, el presupuesto o el flujo.",
         "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "registrar_saldo_inicial",
+        "description": "Registra el saldo inicial del mes (banco y/o efectivo) en el Sheet. Llamar cuando el usuario diga cuánto hay en banco o efectivo al inicio del mes.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "banco":    {"type": "integer", "description": "Saldo en cuenta bancaria en COP"},
+                "efectivo": {"type": "integer", "description": "Efectivo en caja en COP"},
+                "mes":      {"type": "string",  "description": "Mes formato 'Junio 2026'. Default: mes actual."}
+            }
+        }
     }
 ]
 
@@ -403,7 +415,9 @@ MÓDULO FLUJO DE CAJA
 ────────────────────────────────────────
 "flujo de caja" | "¿cómo vamos?" | "proyectado vs real" | "presupuesto" → reporte_flujo_caja()
 Muestra ingresos y egresos reales vs proyectados del mes con % de avance por categoría.
-El reporte llega automáticamente cada lunes."""
+El reporte llega automáticamente cada lunes.
+Cuando el usuario diga cuánto hay en banco o efectivo → registrar_saldo_inicial(banco, efectivo)
+El saldo final = saldo inicial + ingresos - egresos."""
 
 
 def descargar_foto(file_id: str):
@@ -545,6 +559,11 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         resultado = leer_sheet("Producción!A:J")
                     elif name == "reporte_flujo_caja":
                         resultado = _generar_reporte_flujo()
+                    elif name == "registrar_saldo_inicial":
+                        resultado = _registrar_saldo(
+                            inp.get("banco"), inp.get("efectivo"),
+                            inp.get("mes", "")
+                        )
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
@@ -569,6 +588,77 @@ def tg_send(chat_id, texto):
 
 
 # ── Recordatorios programados ─────────────────────────────────────────────────
+
+def _saldo_mes_col(mes_num, anio):
+    from datetime import timedelta as _td
+    presup = leer_sheet_numericos("Presupuesto 2026!A:I")
+    if not presup:
+        return None, None
+    header = presup[0] if presup else []
+    meses_short = {"ene":1,"feb":2,"mar":3,"abr":4,"may":5,"jun":6,
+                   "jul":7,"ago":8,"sep":9,"oct":10,"nov":11,"dic":12}
+    for i, h in enumerate(header):
+        if isinstance(h, (int, float)):
+            try:
+                d = date(1899, 12, 30) + _td(days=int(h))
+                if d.month == mes_num and d.year == anio:
+                    return presup, i
+            except Exception:
+                pass
+        elif isinstance(h, str) and str(anio) in h:
+            if meses_short.get(h[:3].lower()) == mes_num:
+                return presup, i
+    return presup, None
+
+
+def _registrar_saldo(banco, efectivo, mes_str=""):
+    hoy = datetime.now()
+    if mes_str:
+        partes = mes_str.split()
+        mes_nombres = {m.lower(): i for i, m in enumerate(_MESES_ES) if i > 0}
+        mes_num = mes_nombres.get(partes[0].lower(), hoy.month)
+        anio = int(partes[1]) if len(partes) > 1 else hoy.year
+    else:
+        mes_num, anio = hoy.month, hoy.year
+
+    presup, mes_col = _saldo_mes_col(mes_num, anio)
+    if mes_col is None:
+        return f"No encontré columna para {_MESES_ES[mes_num]} {anio}."
+
+    col_letra = chr(ord('A') + mes_col)
+    msgs = []
+    for i, fila in enumerate(presup[1:], start=2):
+        cat = str(fila[1]).strip() if len(fila) > 1 else ""
+        if cat == "Saldo Banco" and banco is not None:
+            actualizar_celda(f"Presupuesto 2026!{col_letra}{i}", str(banco))
+            msgs.append(f"Saldo Banco: ${banco:,}")
+        elif cat == "Efectivo en Caja" and efectivo is not None:
+            actualizar_celda(f"Presupuesto 2026!{col_letra}{i}", str(efectivo))
+            msgs.append(f"Efectivo en Caja: ${efectivo:,}")
+
+    if msgs:
+        actualizar_celda("Presupuesto 2026!K2", f"{_MESES_ES[mes_num]} {anio}")
+        return "✅ " + " · ".join(msgs) + f" registrados para {_MESES_ES[mes_num]} {anio}."
+    return "No encontré filas de saldo en el Sheet."
+
+
+def verificar_saldo_inicial():
+    global _ultima_check_semanal
+    hoy = datetime.now()
+    if hoy.day != 1 or not ADMIN_CHAT_ID:
+        return
+    # Revisar si ya se pidió este mes
+    try:
+        ultimo = leer_sheet("Presupuesto 2026!K2").strip()
+        mes_actual = f"{_MESES_ES[hoy.month]} {hoy.year}"
+        if ultimo == mes_actual:
+            return
+        tg_send(int(ADMIN_CHAT_ID),
+                f"💰 ¡Nuevo mes! Para arrancar el flujo de caja de *{mes_actual}*, "
+                f"dime:\n1. ¿Cuánto hay en el banco?\n2. ¿Cuánto hay en efectivo en caja?")
+    except Exception as e:
+        print(f"[Saldo inicial] Error: {e}")
+
 
 def _generar_reporte_flujo(mes_num=None, anio=None):
     from datetime import timedelta as _td
@@ -662,13 +752,38 @@ def _generar_reporte_flujo(mes_num=None, anio=None):
     flujo_p = total_ing_p - total_egr_p
     semana  = (hoy.day - 1) // 7 + 1
 
+    # Saldo inicial (banco + efectivo)
+    saldo_banco = saldo_efectivo = 0
+    for fila in presup[1:]:
+        if len(fila) <= mes_col:
+            continue
+        cat = str(fila[1]).strip()
+        try:
+            v = float(fila[mes_col] or 0)
+        except (ValueError, TypeError):
+            v = 0
+        if cat == "Saldo Banco":
+            saldo_banco = v
+        elif cat == "Efectivo en Caja":
+            saldo_efectivo = v
+
+    saldo_inicial = saldo_banco + saldo_efectivo
+    saldo_final_r = saldo_inicial + total_ing_r - total_egr_r
+    saldo_final_p = saldo_inicial + total_ing_p - total_egr_p
+
+    semana = (hoy.day - 1) // 7 + 1
     msg  = f"📊 *Flujo de Caja — {_MESES_ES[mes_num]} {anio}* (semana {semana})\n\n"
+    if saldo_inicial:
+        msg += f"🏦 Banco: {fmt(saldo_banco)} · Caja: {fmt(saldo_efectivo)} → *Disponible: {fmt(saldo_inicial)}*\n\n"
     msg += f"💰 *INGRESOS* {fmt(total_ing_r)} / {fmt(total_ing_p)}\n"
     msg += "\n".join(lines_ing) + "\n\n"
     msg += f"💸 *EGRESOS* {fmt(total_egr_r)} / {fmt(total_egr_p)}\n"
     msg += "\n".join(lines_egr) + "\n\n"
     ico_neto = "✅" if flujo_r >= flujo_p * 0.9 else ("⚠️" if flujo_r >= 0 else "🔴")
-    msg += f"{ico_neto} *Flujo neto: {fmt(flujo_r)}* (proy: {fmt(flujo_p)})"
+    msg += f"{ico_neto} *Flujo neto: {fmt(flujo_r)}* (proy: {fmt(flujo_p)})\n"
+    if saldo_inicial:
+        ico_sf = "✅" if saldo_final_r >= 0 else "🔴"
+        msg += f"{ico_sf} *Saldo final estimado: {fmt(saldo_final_r)}* (proy: {fmt(saldo_final_p)})"
     return msg
 
 
@@ -876,6 +991,7 @@ def main():
         verificar_recordatorios()
         verificar_entregas_proximas()
         verificar_reporte_semanal()
+        verificar_saldo_inicial()
 
 
 if __name__ == "__main__":
