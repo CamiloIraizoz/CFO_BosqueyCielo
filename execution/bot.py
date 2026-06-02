@@ -906,9 +906,9 @@ def _generar_reporte_flujo(mes_num=None, anio=None):
         if "TOTAL" in cat.upper() or "──" in cat:
             continue
         try:
-            proyectado[(tipo, cat)] = float(fila[mes_col] or 0)
+            proyectado[(tipo, cat)] = proyectado.get((tipo, cat), 0.0) + float(fila[mes_col] or 0)
         except (ValueError, TypeError):
-            proyectado[(tipo, cat)] = 0.0
+            pass
 
     movs = leer_sheet_numericos("Movimientos!A:J")
     real = {}
