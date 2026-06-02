@@ -39,6 +39,7 @@ _ultima_check_recordatorio = 0.0
 _ultima_check_entregas     = 0.0
 _ultima_check_semanal      = 0.0
 _ultima_check_saldo        = 0.0
+_ultima_check_cartera      = 0.0
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -279,6 +280,48 @@ TOOLS = [
                 "mes":      {"type": "string",  "description": "Mes formato 'Junio 2026'. Default: mes actual."}
             }
         }
+    },
+
+    # ── Cartera ──────────────────────────────────────────────────────────────────
+    {
+        "name": "leer_cartera",
+        "description": "Muestra resumen de cartera: por cobrar (clientes que nos deben) y por pagar (lo que debemos a proveedores).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filtro": {"type": "string", "description": "COBRAR, PAGAR, o vacío para todo"}
+            }
+        }
+    },
+    {
+        "name": "agregar_cartera",
+        "description": "Agrega una entrada nueva a la cartera. Usar para registrar deudas de clientes o pagos pendientes a proveedores.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "seccion":     {"type": "string", "description": "COBRAR (cliente nos debe) o PAGAR (le debemos a alguien)"},
+                "tipo":        {"type": "string", "description": "B2B, Experiencia, Amphoritas, Proveedor, etc."},
+                "cliente":     {"type": "string", "description": "Nombre del cliente o proveedor"},
+                "concepto":    {"type": "string", "description": "Descripción breve"},
+                "monto_total": {"type": "number", "description": "Monto total en COP"},
+                "pagado":      {"type": "number", "description": "Cuánto ya pagaron (default 0)"},
+                "fecha_vence": {"type": "string", "description": "Fecha límite dd/mm/yyyy"},
+                "notas":       {"type": "string", "description": "Notas adicionales"}
+            },
+            "required": ["seccion", "cliente", "concepto", "monto_total", "fecha_vence"]
+        }
+    },
+    {
+        "name": "registrar_cobro_cartera",
+        "description": "Registra un pago recibido de un cliente o un pago hecho a proveedor en la cartera.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cliente": {"type": "string", "description": "Nombre del cliente o proveedor"},
+                "monto":   {"type": "number", "description": "Monto pagado en COP"}
+            },
+            "required": ["cliente", "monto"]
+        }
     }
 ]
 
@@ -418,7 +461,28 @@ MÓDULO FLUJO DE CAJA
 Muestra ingresos y egresos reales vs proyectados del mes con % de avance por categoría.
 El reporte llega automáticamente cada lunes.
 Cuando el usuario diga cuánto hay en banco o efectivo → registrar_saldo_inicial(banco, efectivo)
-El saldo final = saldo inicial + ingresos - egresos."""
+El saldo final = saldo inicial + ingresos - egresos.
+
+────────────────────────────────────────
+MÓDULO CARTERA
+────────────────────────────────────────
+Tab "Cartera" — dos secciones: COBRAR (clientes que nos deben) · PAGAR (lo que debemos a proveedores)
+
+"cartera" | "¿qué me deben?" | "cartera por cobrar" → leer_cartera(filtro="COBRAR")
+"¿qué debo?" | "cuentas por pagar" → leer_cartera(filtro="PAGAR")
+"ver toda la cartera" → leer_cartera()
+"me pagó [cliente] $X" | "pagué a [proveedor] $X" → registrar_cobro_cartera(cliente, monto)
+"[cliente] debe $X por [concepto] hasta [fecha]" → agregar_cartera(seccion="COBRAR", ...)
+"le debo a [proveedor] $X hasta [fecha]" → agregar_cartera(seccion="PAGAR", ...)
+
+FLUJO AGREGAR:
+1. Extrae: quién · cuánto · concepto · fecha límite · si es COBRAR o PAGAR.
+2. Si falta fecha → pregunta "¿Fecha límite de pago?"
+3. Llama agregar_cartera y confirma: "✅ [Cliente] — $monto — vence [fecha]"
+
+REGLAS:
+- Siempre pedir fecha de vencimiento.
+- Alertas automáticas cada 12h si hay items vencidos."""
 
 
 def descargar_foto(file_id: str):
@@ -565,6 +629,17 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             inp.get("banco"), inp.get("efectivo"),
                             inp.get("mes", "")
                         )
+                    elif name == "leer_cartera":
+                        resultado = _leer_cartera(inp.get("filtro", ""))
+                    elif name == "agregar_cartera":
+                        resultado = _cartera_agregar(
+                            inp["seccion"], inp.get("tipo", ""), inp["cliente"],
+                            inp["concepto"], inp["monto_total"],
+                            inp.get("pagado", 0), inp.get("fecha_vence", ""),
+                            inp.get("notas", "")
+                        )
+                    elif name == "registrar_cobro_cartera":
+                        resultado = _cartera_registrar_cobro(inp["cliente"], inp["monto"])
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
@@ -641,6 +716,122 @@ def _registrar_saldo(banco, efectivo, mes_str=""):
         actualizar_celda("Presupuesto 2026!K2", f"{_MESES_ES[mes_num]} {anio}")
         return "✅ " + " · ".join(msgs) + f" registrados para {_MESES_ES[mes_num]} {anio}."
     return "No encontré filas de saldo en el Sheet."
+
+
+def _fmt_cop(n):
+    return f"${n/1_000_000:.1f}M" if abs(n) >= 1_000_000 else f"${n:,.0f}"
+
+
+def _leer_cartera(filtro=""):
+    filas = leer_sheet_numericos("Cartera!A:J")
+    if not filas or len(filas) <= 1:
+        return "Cartera vacía."
+    hoy = datetime.now().date()
+    cobrar, pagar = [], []
+    total_c = total_p = 0
+    for fila in filas[1:]:
+        if len(fila) < 5:
+            continue
+        seccion = str(fila[0]).strip().upper()
+        tipo    = str(fila[1]).strip() if len(fila) > 1 else ""
+        cliente = str(fila[2]).strip() if len(fila) > 2 else ""
+        concepto = str(fila[3]).strip() if len(fila) > 3 else ""
+        try: monto_total = float(fila[4] or 0)
+        except: monto_total = 0
+        try: pagado = float(fila[5] or 0)
+        except: pagado = 0
+        pendiente = monto_total - pagado
+        fecha_str = str(fila[7]).strip() if len(fila) > 7 else ""
+        estado = str(fila[8]).strip().lower() if len(fila) > 8 else ""
+        if estado == "pagado" or pendiente <= 0:
+            continue
+        vencido = False
+        if fecha_str:
+            try:
+                fv = datetime.strptime(fecha_str, "%d/%m/%Y").date()
+                vencido = fv < hoy
+                fecha_fmt = fv.strftime("%d/%m")
+            except:
+                fecha_fmt = fecha_str
+        else:
+            fecha_fmt = "sin fecha"
+        ico = "🔴" if vencido else "⚠️"
+        linea = f"  {ico} {cliente} — {concepto}: {_fmt_cop(pendiente)} (vence {fecha_fmt})"
+        if seccion == "COBRAR":
+            cobrar.append(linea); total_c += pendiente
+        elif seccion == "PAGAR":
+            pagar.append(linea); total_p += pendiente
+    if filtro.upper() == "COBRAR": pagar, total_p = [], 0
+    elif filtro.upper() == "PAGAR": cobrar, total_c = [], 0
+    msg = "📋 *CARTERA*\n\n"
+    msg += f"💰 *POR COBRAR* — {_fmt_cop(total_c)}\n" + ("\n".join(cobrar) if cobrar else "  (nada pendiente)") + "\n\n"
+    msg += f"💸 *POR PAGAR* — {_fmt_cop(total_p)}\n" + ("\n".join(pagar) if pagar else "  (nada pendiente)")
+    return msg
+
+
+def _cartera_agregar(seccion, tipo, cliente, concepto, monto_total, pagado=0, fecha_vence="", notas=""):
+    try: pagado = float(pagado or 0)
+    except: pagado = 0
+    pendiente = float(monto_total) - pagado
+    estado = "Pagado" if pendiente <= 0 else ("Parcial" if pagado > 0 else "Pendiente")
+    row = [seccion.upper(), tipo, cliente, concepto, monto_total, pagado, pendiente, fecha_vence, estado, notas]
+    r = agregar_fila("Cartera!A:J", row)
+    return f"✅ Cartera: {cliente} — {concepto} — {_fmt_cop(monto_total)} — vence {fecha_vence}"
+
+
+def _cartera_registrar_cobro(cliente, monto):
+    filas = leer_sheet_numericos("Cartera!A:J")
+    for i, fila in enumerate(filas[1:], start=2):
+        if len(fila) < 5: continue
+        nombre = str(fila[2]).strip().lower()
+        if cliente.lower() in nombre or nombre in cliente.lower():
+            try: pagado_actual = float(fila[5] or 0)
+            except: pagado_actual = 0
+            try: monto_total = float(fila[4] or 0)
+            except: monto_total = 0
+            nuevo_pagado    = pagado_actual + float(monto)
+            nuevo_pendiente = monto_total - nuevo_pagado
+            nuevo_estado    = "Pagado" if nuevo_pendiente <= 0 else "Parcial"
+            actualizar_celda(f"Cartera!F{i}", nuevo_pagado)
+            actualizar_celda(f"Cartera!G{i}", nuevo_pendiente)
+            actualizar_celda(f"Cartera!I{i}", nuevo_estado)
+            return f"✅ {str(fila[2]).strip()}: +{_fmt_cop(monto)} registrado. Pendiente: {_fmt_cop(max(nuevo_pendiente, 0))}"
+    return f"No encontré '{cliente}' en la cartera."
+
+
+def verificar_cartera_vencida():
+    global _ultima_check_cartera
+    ahora = time.time()
+    if ahora - _ultima_check_cartera < 43200:
+        return
+    _ultima_check_cartera = ahora
+    if not ADMIN_CHAT_ID:
+        return
+    try:
+        filas = leer_sheet_numericos("Cartera!A:J")
+        hoy = datetime.now().date()
+        vencidos = []
+        for fila in filas[1:]:
+            if len(fila) < 8: continue
+            estado = str(fila[8]).strip().lower() if len(fila) > 8 else ""
+            if estado == "pagado": continue
+            try: pendiente = float(fila[6] or 0)
+            except: pendiente = 0
+            if pendiente <= 0: continue
+            fecha_str = str(fila[7]).strip()
+            if not fecha_str: continue
+            try:
+                fv = datetime.strptime(fecha_str, "%d/%m/%Y").date()
+                if fv < hoy:
+                    seccion = str(fila[0]).strip().upper()
+                    ico = "🔴" if seccion == "COBRAR" else "💸"
+                    vencidos.append(f"{ico} {str(fila[2]).strip()} — {str(fila[3]).strip()}: {_fmt_cop(pendiente)} (venció {fv.strftime('%d/%m')})")
+            except:
+                continue
+        if vencidos:
+            tg_send(int(ADMIN_CHAT_ID), "⚠️ *Cartera vencida:*\n" + "\n".join(vencidos))
+    except Exception as e:
+        print(f"[Cartera] Error: {e}")
 
 
 def verificar_saldo_inicial():
@@ -1000,6 +1191,7 @@ def main():
         verificar_entregas_proximas()
         verificar_reporte_semanal()
         verificar_saldo_inicial()
+        verificar_cartera_vencida()
 
 
 if __name__ == "__main__":
