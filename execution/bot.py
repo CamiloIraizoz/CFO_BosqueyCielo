@@ -873,19 +873,24 @@ def _generar_reporte_flujo(mes_num=None, anio=None):
     mes_col = None
     meses_short = {"ene":1,"feb":2,"mar":3,"abr":4,"may":5,"jun":6,
                    "jul":7,"ago":8,"sep":9,"oct":10,"nov":11,"dic":12}
+    meses_full  = {m.lower(): i for i, m in enumerate(_MESES_ES) if i > 0}
     for i, h in enumerate(header):
         if isinstance(h, (int, float)):
             try:
                 d = date(1899, 12, 30) + _td(days=int(h))
                 if d.month == mes_num and d.year == anio:
-                    mes_col = i
-                    break
+                    mes_col = i; break
             except Exception:
                 pass
-        elif isinstance(h, str) and str(anio) in h:
-            if meses_short.get(h[:3].lower()) == mes_num:
-                mes_col = i
-                break
+        elif isinstance(h, str):
+            h_low = h.strip().lower()
+            # "Junio 2026" o "Jun 2026"
+            if str(anio) in h_low:
+                if meses_short.get(h_low[:3]) == mes_num or meses_full.get(h_low.split()[0]) == mes_num:
+                    mes_col = i; break
+            # "Junio" o "Jun" sin año
+            elif meses_full.get(h_low) == mes_num or meses_short.get(h_low[:3]) == mes_num:
+                mes_col = i; break
 
     if mes_col is None:
         return f"No encontré columna para {_MESES_ES[mes_num]} {anio} en Presupuesto 2026."
