@@ -643,19 +643,19 @@ def _registrar_saldo(banco, efectivo, mes_str=""):
 
 
 def verificar_saldo_inicial():
-    global _ultima_check_semanal
     hoy = datetime.now()
-    if hoy.day != 1 or not ADMIN_CHAT_ID:
+    if not ADMIN_CHAT_ID:
         return
-    # Revisar si ya se pidió este mes
+    # Dispara el día 1 O si el mes actual nunca se registró (ej. el bot no corrió el día 1)
     try:
         ultimo = leer_sheet("Presupuesto 2026!K2").strip()
         mes_actual = f"{_MESES_ES[hoy.month]} {hoy.year}"
         if ultimo == mes_actual:
             return
-        tg_send(int(ADMIN_CHAT_ID),
-                f"💰 ¡Nuevo mes! Para arrancar el flujo de caja de *{mes_actual}*, "
-                f"dime:\n1. ¿Cuánto hay en el banco?\n2. ¿Cuánto hay en efectivo en caja?")
+        if hoy.day <= 5 or not ultimo:
+            tg_send(int(ADMIN_CHAT_ID),
+                    f"💰 ¡Nuevo mes! Para arrancar el flujo de caja de *{mes_actual}*, "
+                    f"dime:\n1. ¿Cuánto hay en el banco?\n2. ¿Cuánto hay en efectivo en caja?")
     except Exception as e:
         print(f"[Saldo inicial] Error: {e}")
 
