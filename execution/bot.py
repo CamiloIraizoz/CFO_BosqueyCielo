@@ -38,6 +38,7 @@ _MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
 _ultima_check_recordatorio = 0.0
 _ultima_check_entregas     = 0.0
 _ultima_check_semanal      = 0.0
+_ultima_check_saldo        = 0.0
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -643,16 +644,23 @@ def _registrar_saldo(banco, efectivo, mes_str=""):
 
 
 def verificar_saldo_inicial():
+    global _ultima_check_saldo
+    ahora = time.time()
+    if ahora - _ultima_check_saldo < 43200:  # máximo una vez cada 12h
+        return
     hoy = datetime.now()
     if not ADMIN_CHAT_ID:
         return
-    # Dispara el día 1 O si el mes actual nunca se registró (ej. el bot no corrió el día 1)
     try:
         ultimo = leer_sheet("Presupuesto 2026!K2").strip()
         mes_actual = f"{_MESES_ES[hoy.month]} {hoy.year}"
         if ultimo == mes_actual:
+            _ultima_check_saldo = ahora
             return
         if hoy.day <= 5 or not ultimo:
+            # Marcar K2 antes de enviar para no repetir si el loop vuelve a correr
+            actualizar_celda("Presupuesto 2026!K2", mes_actual)
+            _ultima_check_saldo = ahora
             tg_send(int(ADMIN_CHAT_ID),
                     f"💰 ¡Nuevo mes! Para arrancar el flujo de caja de *{mes_actual}*, "
                     f"dime:\n1. ¿Cuánto hay en el banco?\n2. ¿Cuánto hay en efectivo en caja?")
