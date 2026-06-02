@@ -845,7 +845,7 @@ def verificar_saldo_inicial():
     try:
         ultimo = leer_sheet("Presupuesto 2026!K2").strip()
         mes_actual = f"{_MESES_ES[hoy.month]} {hoy.year}"
-        if ultimo == mes_actual:
+        if ultimo.lower() == mes_actual.lower():
             _ultima_check_saldo = ahora
             return
         if hoy.day <= 5 or not ultimo:
