@@ -512,6 +512,7 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
 
     messages = history + [{"role": "user", "content": content}]
     iteraciones = 0
+    last_tool_result = None
 
     while iteraciones < 6:
         iteraciones += 1
@@ -642,11 +643,12 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         resultado = _cartera_registrar_cobro(inp["cliente"], inp["monto"])
                     else:
                         resultado = f"Herramienta desconocida: {name}"
+                    last_tool_result = resultado
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": resultado})
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         else:
-            respuesta = next((b.text for b in response.content if hasattr(b, "text")), "Sin respuesta.")
+            respuesta = next((b.text for b in response.content if hasattr(b, "text")), None) or last_tool_result or "Sin respuesta."
             new_history = history + [
                 {"role": "user", "content": history_user_text},
                 {"role": "assistant", "content": respuesta}
