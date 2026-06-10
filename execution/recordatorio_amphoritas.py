@@ -9,6 +9,7 @@ Uso:
 """
 import sys
 import os
+import unicodedata
 import requests
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -54,43 +55,45 @@ def _serial_a_fecha(serial):
 
 
 def leer_pagos_mes(mes_num: int, anio: int) -> set[str]:
-    """Retorna set de nombres (lower) que tienen pago registrado en el mes."""
-    filas = leer_sheet_numericos("Studio Amphora!A:I")
+    """Retorna set de nombres (lower) que tienen ingreso Studio Amphora en Movimientos para el mes."""
+    filas = leer_sheet_numericos("Movimientos!A:J")
     pagados = set()
+    mes_nombre = MESES_ES[mes_num].lower()  # e.g. "junio"
     for fila in filas[1:]:
-        if len(fila) < 3:
+        if len(fila) < 7:
             continue
-        fecha_val = fila[1] if len(fila) > 1 else ""
-        nombre    = str(fila[2]).strip() if len(fila) > 2 else ""
-        if not nombre:
+        tipo = str(fila[3]).strip().upper()
+        if tipo != "INGRESO":
             continue
-
-        # Fecha como string "DD/MM/YYYY"
-        if isinstance(fecha_val, str) and "/" in fecha_val:
-            try:
-                parts = fecha_val.split("/")
-                m, y = int(parts[1]), int(parts[2])
-                if m == mes_num and y == anio:
-                    pagados.add(nombre.lower())
-            except Exception:
-                pass
-        # Fecha como número serial de Sheets
-        elif isinstance(fecha_val, (int, float)):
-            d = _serial_a_fecha(fecha_val)
-            if d and d.month == mes_num and d.year == anio:
-                pagados.add(nombre.lower())
-
+        cat = str(fila[4]).strip().lower()
+        if "studio amphora" not in cat:
+            continue
+        mes_fila = str(fila[1]).strip().lower()
+        try:
+            año_fila = int(float(fila[2]))
+        except (ValueError, TypeError):
+            continue
+        if mes_fila != mes_nombre or año_fila != anio:
+            continue
+        nombre = str(fila[6]).strip()
+        if nombre:
+            pagados.add(nombre.lower())
     return pagados
 
 
 # ── Matching flexible de nombres ──────────────────────────────────────────────
 
+def _sin_tildes(s: str) -> str:
+    return ''.join(c for c in unicodedata.normalize('NFD', s)
+                   if unicodedata.category(c) != 'Mn')
+
 def ya_pago(nombre: str, pagados: set[str]) -> bool:
-    nl = nombre.lower()
-    if nl in pagados:
+    nl = _sin_tildes(nombre.lower())
+    pagados_norm = {_sin_tildes(p) for p in pagados}
+    if nl in pagados_norm:
         return True
-    partes = [p for p in nl.split() if len(p) > 2]  # ignorar "de", "la", etc.
-    for pagado in pagados:
+    partes = [p for p in nl.split() if len(p) > 2]
+    for pagado in pagados_norm:
         coincidencias = sum(1 for p in partes if p in pagado)
         if coincidencias >= 2:
             return True

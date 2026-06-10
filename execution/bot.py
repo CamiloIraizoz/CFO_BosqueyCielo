@@ -1104,7 +1104,8 @@ def _leer_ultimo_recordatorio() -> str:
 def _guardar_ultimo_recordatorio(mes_str: str):
     try:
         actualizar_celda("Amphoritas!A17", "_ultimo_recordatorio")
-        actualizar_celda("Amphoritas!B17", mes_str)
+        # Prefijo ' fuerza texto en Sheets (evita que interprete "Junio 2026" como fecha serial)
+        actualizar_celda("Amphoritas!B17", "'" + mes_str)
     except Exception as e:
         print(f"[Recordatorio] Error guardando estado: {e}")
 
