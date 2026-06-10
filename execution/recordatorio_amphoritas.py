@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sheets import leer_sheet_numericos
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-FROM_EMAIL     = os.getenv("AMPHORITAS_FROM_EMAIL", "Amphora B&C <onboarding@resend.dev>")
+FROM_EMAIL     = os.getenv("AMPHORITAS_FROM_EMAIL", "Amphora B&C <hola@bosqueycielo.com>")
 
 MESES_ES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -140,7 +140,10 @@ cuando quieras. Si ya lo hiciste, ¡ignora esto y mil gracias! 🏺</p>
         r.raise_for_status()
         return True
     except Exception as e:
-        print(f"    Error enviando a {email}: {e}")
+        detail = ""
+        if hasattr(e, "response") and e.response is not None:
+            detail = f" — Resend: {e.response.status_code} {e.response.text[:200]}"
+        print(f"    Error enviando a {email}: {e}{detail}")
         return False
 
 

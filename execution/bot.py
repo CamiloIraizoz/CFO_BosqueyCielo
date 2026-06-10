@@ -40,6 +40,7 @@ _ultima_check_entregas     = 0.0
 _ultima_check_semanal      = 0.0
 _ultima_check_saldo        = 0.0
 _ultima_check_cartera      = 0.0
+_recordatorio_mes_enviado: set = set()  # in-memory: evita repetir en el mismo deployment
 
 # ── Tools para Claude ──────────────────────────────────────────────────────────
 
@@ -1108,7 +1109,7 @@ def _guardar_ultimo_recordatorio(mes_str: str):
         print(f"[Recordatorio] Error guardando estado: {e}")
 
 def verificar_recordatorios():
-    global _ultima_check_recordatorio
+    global _ultima_check_recordatorio, _recordatorio_mes_enviado
     ahora = time.time()
     if ahora - _ultima_check_recordatorio < 3600:
         return
@@ -1119,8 +1120,17 @@ def verificar_recordatorios():
         return
 
     mes_str = f"{_MESES_ES[hoy.month]} {hoy.year}"
-    if _leer_ultimo_recordatorio() == mes_str:
+
+    # Guardia en memoria (persiste dentro del mismo deployment)
+    if mes_str in _recordatorio_mes_enviado:
         return
+
+    if _leer_ultimo_recordatorio() == mes_str:
+        _recordatorio_mes_enviado.add(mes_str)
+        return
+
+    # Marcar ANTES de enviar para no repetir aunque falle el Sheet
+    _recordatorio_mes_enviado.add(mes_str)
 
     print(f"[Recordatorio] Iniciando envío {mes_str}...")
     try:
@@ -1129,18 +1139,24 @@ def verificar_recordatorios():
         pendientes = [a for a in amphoritas if not ya_pago(a["nombre"], pagados)]
 
         enviados = 0
+        fallidos = []
         for a in pendientes:
-            if _enviar_recordatorio(a["nombre"], a["email"], mes_str,
-                                    a["mensualidad"], dry_run=False):
+            ok = _enviar_recordatorio(a["nombre"], a["email"], mes_str,
+                                      a["mensualidad"], dry_run=False)
+            if ok:
                 enviados += 1
+            else:
+                fallidos.append(f"{a['nombre']} ({a['email']})")
 
         _guardar_ultimo_recordatorio(mes_str)
         print(f"[Recordatorio] {enviados}/{len(pendientes)} enviados — {mes_str}")
 
         if ADMIN_CHAT_ID and pendientes:
             lista = "\n".join(f"• {a['nombre']}" for a in pendientes)
-            tg_send(int(ADMIN_CHAT_ID),
-                    f"📧 Recordatorios {mes_str}: {enviados} emails enviados.\n{lista}")
+            msg = f"📧 Recordatorios {mes_str}: {enviados}/{len(pendientes)} enviados.\n{lista}"
+            if fallidos:
+                msg += f"\n\n⚠️ Falló envío a:\n" + "\n".join(f"• {f}" for f in fallidos)
+            tg_send(int(ADMIN_CHAT_ID), msg)
     except Exception as e:
         print(f"[Recordatorio] Error: {e}")
 
