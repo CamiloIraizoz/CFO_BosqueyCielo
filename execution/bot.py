@@ -1246,6 +1246,10 @@ def main():
             if offset:
                 params["offset"] = offset
             resp = requests.get(f"{TG_API}/getUpdates", params=params, timeout=25).json()
+            if not resp.get("ok"):
+                print(f"Error de Telegram en getUpdates: {resp}")
+                time.sleep(5)
+                continue
             updates = resp.get("result", [])
 
             for update in updates:
