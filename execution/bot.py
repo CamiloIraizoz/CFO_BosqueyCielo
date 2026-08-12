@@ -22,6 +22,9 @@ from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas, 
 from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
+from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
+    pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
+    actualizar_presupuesto as meta_actualizar_presupuesto
 
 TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -323,6 +326,56 @@ TOOLS = [
             },
             "required": ["cliente", "monto"]
         }
+    },
+
+    # ── Meta Ads ─────────────────────────────────────────────────────────────────
+    {
+        "name": "meta_ads_campanas",
+        "description": "Lista las campañas de Meta Ads de Bosque y Cielo con id, estado y presupuesto. Úsalo primero para saber qué campañas existen antes de pedir insights o hacer cualquier acción.",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "meta_ads_insights",
+        "description": "Métricas de rendimiento de Meta Ads (gasto, alcance, ROAS, CPA) a nivel de cuenta, campaña, ad set o ad.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nivel": {"type": "string", "enum": ["account", "campaign", "adset", "ad"]},
+                "object_id": {"type": "string", "description": "ID de la cuenta ('act_379796923470762'), campaña, ad set o ad"},
+                "date_preset": {"type": "string", "enum": ["today", "yesterday", "last_7d", "last_30d", "this_month", "last_month"], "description": "Default last_7d"}
+            },
+            "required": ["nivel", "object_id"]
+        }
+    },
+    {
+        "name": "meta_ads_pausar_campana",
+        "description": "Pausa una campaña de Meta Ads. SIEMPRE confirma con el usuario antes de llamarla, mostrando el nombre de la campaña.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"campaign_id": {"type": "string"}},
+            "required": ["campaign_id"]
+        }
+    },
+    {
+        "name": "meta_ads_reanudar_campana",
+        "description": "Reanuda una campaña de Meta Ads pausada. SIEMPRE confirma con el usuario antes de llamarla, mostrando el nombre de la campaña.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"campaign_id": {"type": "string"}},
+            "required": ["campaign_id"]
+        }
+    },
+    {
+        "name": "meta_ads_actualizar_presupuesto",
+        "description": "Cambia el presupuesto diario de una campaña de Meta Ads. SIEMPRE confirma con el usuario antes de llamarla, mostrando presupuesto actual y nuevo.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "campaign_id": {"type": "string"},
+                "presupuesto_diario": {"type": "number", "description": "Nuevo presupuesto diario en COP, sin centavos"}
+            },
+            "required": ["campaign_id", "presupuesto_diario"]
+        }
     }
 ]
 
@@ -483,7 +536,18 @@ FLUJO AGREGAR:
 
 REGLAS:
 - Siempre pedir fecha de vencimiento.
-- Alertas automáticas cada 12h si hay items vencidos."""
+- Alertas automáticas cada 12h si hay items vencidos.
+
+────────────────────────────────────────
+MÓDULO META ADS
+────────────────────────────────────────
+Cuenta publicitaria: act_379796923470762 (Bosque y Cielo Homeware).
+
+"campañas" | "cómo van los anuncios" → meta_ads_campanas() primero, para saber qué campañas existen y sus IDs.
+Para métricas (ROAS, CPA, gasto, alcance) → meta_ads_insights(nivel, object_id, date_preset). Prioridad al analizar: ROAS > CPA > alcance/frecuencia > gasto vs. presupuesto.
+Los campos actions/action_values vienen por action_type (ej. "purchase") — no sumes el array completo a ciegas.
+
+REGLA ABSOLUTA: a diferencia del Sheet, en Meta Ads SIEMPRE confirma con el usuario antes de pausar/reanudar una campaña o cambiar un presupuesto — sin excepción, mostrando el cambio exacto (nombre de campaña, estado o presupuesto actual → nuevo). Es gasto publicitario real en curso."""
 
 
 def descargar_foto(file_id: str):
@@ -642,6 +706,17 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         )
                     elif name == "registrar_cobro_cartera":
                         resultado = _cartera_registrar_cobro(inp["cliente"], inp["monto"])
+                    # ── Meta Ads ─────────────────────────────────────────────
+                    elif name == "meta_ads_campanas":
+                        resultado = meta_listar_campanas()
+                    elif name == "meta_ads_insights":
+                        resultado = meta_obtener_insights(inp["nivel"], inp["object_id"], inp.get("date_preset", "last_7d"))
+                    elif name == "meta_ads_pausar_campana":
+                        resultado = meta_pausar_campana(inp["campaign_id"])
+                    elif name == "meta_ads_reanudar_campana":
+                        resultado = meta_reanudar_campana(inp["campaign_id"])
+                    elif name == "meta_ads_actualizar_presupuesto":
+                        resultado = meta_actualizar_presupuesto(inp["campaign_id"], inp["presupuesto_diario"])
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     last_tool_result = resultado
@@ -1211,11 +1286,14 @@ def main():
             print(f"Error en polling: {e}")
             time.sleep(5)
 
-        verificar_recordatorios()
-        verificar_entregas_proximas()
-        verificar_reporte_semanal()
-        verificar_saldo_inicial()
-        verificar_cartera_vencida()
+        try:
+            verificar_recordatorios()
+            verificar_entregas_proximas()
+            verificar_reporte_semanal()
+            verificar_saldo_inicial()
+            verificar_cartera_vencida()
+        except Exception as e:
+            print(f"Error en tareas programadas: {e}")
 
 
 if __name__ == "__main__":

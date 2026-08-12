@@ -21,7 +21,7 @@ SHOPIFY_TOKEN   = os.getenv("SHOPIFY_TOKEN")
 SHOPIFY_STORE   = os.getenv("SHOPIFY_STORE", "bosqueycielo.myshopify.com")
 LAST_ORDER_FILE = Path(__file__).parent / ".last_shopify_order"
 SYNC_INTERVAL   = 15 * 60  # 15 minutos
-SHOPIFY_API_VER = "2024-01"
+SHOPIFY_API_VER = "2026-07"
 
 
 def shopify_get_orders(since_id: int) -> list:
