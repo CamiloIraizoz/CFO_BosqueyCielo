@@ -18,7 +18,7 @@ load_dotenv(env_path, override=False)
 sys.path.insert(0, str(Path(__file__).parent))
 from sheets import agregar_fila
 SHOPIFY_TOKEN   = os.getenv("SHOPIFY_TOKEN")
-SHOPIFY_STORE   = os.getenv("SHOPIFY_STORE", "bosqueycielo.myshopify.com")
+SHOPIFY_STORE   = os.getenv("SHOPIFY_STORE", "0b8b38.myshopify.com")
 LAST_ORDER_FILE = Path(__file__).parent / ".last_shopify_order"
 SYNC_INTERVAL   = 15 * 60  # 15 minutos
 SHOPIFY_API_VER = "2026-07"
