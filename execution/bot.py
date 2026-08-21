@@ -35,6 +35,7 @@ TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 conversation_history: dict[int, list] = {}
+ultima_foto: dict[int, bytes] = {}  # última foto recibida por chat, para usar como imagen de anuncio en Meta Ads
 
 _MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
              "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
@@ -386,14 +387,15 @@ TOOLS = [
                 "nombre": {"type": "string", "description": "Nombre de la campaña"},
                 "objetivo": {"type": "string", "enum": ["trafico", "ventas", "interaccion", "reconocimiento"]},
                 "presupuesto_diario": {"type": "number", "description": "Presupuesto diario en COP, sin centavos"},
-                "imagen_url": {"type": "string", "description": "URL pública de la imagen del anuncio (ej. foto de producto de Shopify)"},
+                "imagen_url": {"type": "string", "description": "URL pública de la imagen del anuncio (ej. foto de producto de Shopify). No uses esto si el usuario ya envió la foto por Telegram — en ese caso usa usar_foto_enviada."},
+                "usar_foto_enviada": {"type": "boolean", "description": "True si el usuario mandó la foto directamente como imagen adjunta en el chat de Telegram (en vez de un link). Usa la última foto que envió."},
                 "texto_principal": {"type": "string", "description": "Texto principal del anuncio (primary text)"},
                 "titular": {"type": "string", "description": "Titular / headline del anuncio"},
                 "link_destino": {"type": "string", "description": "URL a la que lleva el anuncio (ej. producto en bosqueycielo.com)"},
                 "descripcion": {"type": "string", "description": "Descripción corta opcional bajo el titular"},
                 "cta": {"type": "string", "description": "Texto del botón, ej. SHOP_NOW, LEARN_MORE. Default SHOP_NOW"}
             },
-            "required": ["nombre", "objetivo", "presupuesto_diario", "imagen_url", "texto_principal", "titular", "link_destino"]
+            "required": ["nombre", "objetivo", "presupuesto_diario", "texto_principal", "titular", "link_destino"]
         }
     }
 ]
@@ -566,7 +568,7 @@ Cuenta publicitaria: act_379796923470762 (Bosque y Cielo Homeware).
 Para métricas (ROAS, CPA, gasto, alcance) → meta_ads_insights(nivel, object_id, date_preset). Prioridad al analizar: ROAS > CPA > alcance/frecuencia > gasto vs. presupuesto.
 Los campos actions/action_values vienen por action_type (ej. "purchase") — no sumes el array completo a ciegas.
 
-CREAR CAMPAÑA ("crea una campaña", "hazme un anuncio de X"): usa meta_ads_crear_campana. Antes de llamarla, junta con el usuario: nombre, objetivo (trafico/ventas/interaccion/reconocimiento — si duda, "ventas" para vender producto), presupuesto diario, imagen (puede ser una URL de foto de producto de Shopify), texto principal, titular, link de destino y opcionalmente descripción/cta. La función SIEMPRE crea todo en PAUSA — nunca gasta sola. Después de crearla, dile al usuario que la revise en Ads Manager y que la active manualmente o te pida meta_ads_reanudar_campana.
+CREAR CAMPAÑA ("crea una campaña", "hazme un anuncio de X"): usa meta_ads_crear_campana. Antes de llamarla, junta con el usuario: nombre, objetivo (trafico/ventas/interaccion/reconocimiento — si duda, "ventas" para vender producto), presupuesto diario, imagen, texto principal, titular, link de destino y opcionalmente descripción/cta. La imagen puede llegar de dos formas: (a) el usuario manda un link → usa imagen_url; (b) el usuario manda la foto directo al chat como adjunto → usa usar_foto_enviada=true (NO le pidas un link si ya te mandó la foto). La función SIEMPRE crea todo en PAUSA — nunca gasta sola. Después de crearla, dile al usuario que la revise en Ads Manager y que la active manualmente o te pida meta_ads_reanudar_campana.
 
 REGLA ABSOLUTA: a diferencia del Sheet, en Meta Ads SIEMPRE confirma con el usuario antes de pausar/reanudar una campaña, cambiar un presupuesto, o crear una campaña nueva — sin excepción, mostrando el cambio exacto (nombre de campaña, estado o presupuesto actual → nuevo, o el detalle completo de la campaña nueva). Es gasto publicitario real en curso."""
 
@@ -590,7 +592,7 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
             content.append({"type": "text", "text": texto})
         content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}})
         if not texto:
-            content.append({"type": "text", "text": "Registra este movimiento."})
+            content.append({"type": "text", "text": "Analiza esta imagen según el contexto de la conversación (puede ser un movimiento financiero para registrar, o una foto para un anuncio de Meta Ads si eso es lo que se estaba armando)."})
         history_user_text = f"[pantallazo] {texto}".strip()
     else:
         content = texto
@@ -739,10 +741,11 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                     elif name == "meta_ads_actualizar_presupuesto":
                         resultado = meta_actualizar_presupuesto(inp["campaign_id"], inp["presupuesto_diario"])
                     elif name == "meta_ads_crear_campana":
+                        foto = ultima_foto.get(chat_id) if inp.get("usar_foto_enviada") else None
                         resultado = meta_crear_campana_completa(
-                            inp["nombre"], inp["objetivo"], inp["presupuesto_diario"], inp["imagen_url"],
+                            inp["nombre"], inp["objetivo"], inp["presupuesto_diario"], inp.get("imagen_url", ""),
                             inp["texto_principal"], inp["titular"], inp["link_destino"],
-                            inp.get("descripcion", ""), inp.get("cta", "SHOP_NOW")
+                            inp.get("descripcion", ""), inp.get("cta", "SHOP_NOW"), imagen_bytes=foto
                         )
                     else:
                         resultado = f"Herramienta desconocida: {name}"
@@ -1298,6 +1301,8 @@ def main():
                 if msg.get("photo"):
                     largest = max(msg["photo"], key=lambda p: p.get("file_size", 0))
                     foto_bytes = descargar_foto(largest["file_id"])
+                    if foto_bytes:
+                        ultima_foto[chat_id] = foto_bytes
 
                 if not chat_id or (not texto and not foto_bytes):
                     continue

@@ -122,11 +122,9 @@ def actualizar_presupuesto(campaign_id: str, presupuesto_diario: float) -> str:
         return f"Error actualizando presupuesto: {e}"
 
 
-def _subir_imagen(imagen_url: str) -> str:
-    """Descarga una imagen pública (ej. foto de producto de Shopify) y la sube a Meta. Retorna el image_hash."""
-    img = requests.get(imagen_url, timeout=20)
-    img.raise_for_status()
-    b64 = base64.b64encode(img.content).decode()
+def _subir_imagen_bytes(foto_bytes: bytes) -> str:
+    """Sube bytes de imagen (ej. foto recibida directo por Telegram) a Meta. Retorna el image_hash."""
+    b64 = base64.b64encode(foto_bytes).decode()
     r = requests.post(f"{BASE_URL}/{ACCOUNT_ID}/adimages",
                        data=_params({"bytes": b64}), timeout=30)
     r.raise_for_status()
@@ -135,17 +133,27 @@ def _subir_imagen(imagen_url: str) -> str:
     return primera["hash"]
 
 
+def _subir_imagen(imagen_url: str) -> str:
+    """Descarga una imagen pública (ej. foto de producto de Shopify) y la sube a Meta. Retorna el image_hash."""
+    img = requests.get(imagen_url, timeout=20)
+    img.raise_for_status()
+    return _subir_imagen_bytes(img.content)
+
+
 def crear_campana_completa(nombre: str, objetivo: str, presupuesto_diario: float,
                             imagen_url: str, texto_principal: str, titular: str,
                             link_destino: str, descripcion: str = "",
-                            cta: str = "SHOP_NOW") -> str:
+                            cta: str = "SHOP_NOW", imagen_bytes: bytes = None) -> str:
     """
     Crea campaña + ad set + creativo + anuncio, TODO en estado PAUSED (nunca gasta sin activación manual).
     objetivo: trafico | ventas | interaccion | reconocimiento
     Targeting por defecto: Colombia, 18-65, sin restricción de género, placements automáticos (Advantage+).
+    imagen_bytes: si se pasa (ej. foto recibida directo por Telegram), se usa en vez de descargar imagen_url.
     """
     if objetivo not in _OBJETIVOS:
         return f"Objetivo inválido: {objetivo}. Usa uno de: {', '.join(_OBJETIVOS)}"
+    if not imagen_bytes and not imagen_url:
+        return "Falta la imagen: manda una foto o un link de imagen."
     objective, optimization_goal, billing_event, promoted_object, destination_type = _OBJETIVOS[objetivo]
 
     try:
@@ -177,7 +185,7 @@ def crear_campana_completa(nombre: str, objetivo: str, presupuesto_diario: float
         adset_id = r.json()["id"]
 
         # 3. Imagen + creativo
-        image_hash = _subir_imagen(imagen_url)
+        image_hash = _subir_imagen_bytes(imagen_bytes) if imagen_bytes else _subir_imagen(imagen_url)
         object_story_spec = {
             "page_id": PAGE_ID,
             "link_data": {
