@@ -24,7 +24,7 @@ from email_sender import enviar_cotizacion, enviar_cotizacion_pottery
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
-    actualizar_presupuesto as meta_actualizar_presupuesto
+    actualizar_presupuesto as meta_actualizar_presupuesto, crear_campana_completa as meta_crear_campana_completa
 
 TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -376,6 +376,25 @@ TOOLS = [
             },
             "required": ["campaign_id", "presupuesto_diario"]
         }
+    },
+    {
+        "name": "meta_ads_crear_campana",
+        "description": "Crea una campaña de Meta Ads completa (campaña + ad set + creativo + anuncio) desde cero, SIEMPRE en estado PAUSA — nunca se activa ni gasta automáticamente. SIEMPRE confirma con el usuario antes de llamarla, mostrando nombre, objetivo, presupuesto diario, texto/imagen y destino. Después de crearla, recuérdale al usuario que debe activarla manualmente (o pedir meta_ads_reanudar_campana) cuando esté conforme.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nombre": {"type": "string", "description": "Nombre de la campaña"},
+                "objetivo": {"type": "string", "enum": ["trafico", "ventas", "interaccion", "reconocimiento"]},
+                "presupuesto_diario": {"type": "number", "description": "Presupuesto diario en COP, sin centavos"},
+                "imagen_url": {"type": "string", "description": "URL pública de la imagen del anuncio (ej. foto de producto de Shopify)"},
+                "texto_principal": {"type": "string", "description": "Texto principal del anuncio (primary text)"},
+                "titular": {"type": "string", "description": "Titular / headline del anuncio"},
+                "link_destino": {"type": "string", "description": "URL a la que lleva el anuncio (ej. producto en bosqueycielo.com)"},
+                "descripcion": {"type": "string", "description": "Descripción corta opcional bajo el titular"},
+                "cta": {"type": "string", "description": "Texto del botón, ej. SHOP_NOW, LEARN_MORE. Default SHOP_NOW"}
+            },
+            "required": ["nombre", "objetivo", "presupuesto_diario", "imagen_url", "texto_principal", "titular", "link_destino"]
+        }
     }
 ]
 
@@ -547,7 +566,9 @@ Cuenta publicitaria: act_379796923470762 (Bosque y Cielo Homeware).
 Para métricas (ROAS, CPA, gasto, alcance) → meta_ads_insights(nivel, object_id, date_preset). Prioridad al analizar: ROAS > CPA > alcance/frecuencia > gasto vs. presupuesto.
 Los campos actions/action_values vienen por action_type (ej. "purchase") — no sumes el array completo a ciegas.
 
-REGLA ABSOLUTA: a diferencia del Sheet, en Meta Ads SIEMPRE confirma con el usuario antes de pausar/reanudar una campaña o cambiar un presupuesto — sin excepción, mostrando el cambio exacto (nombre de campaña, estado o presupuesto actual → nuevo). Es gasto publicitario real en curso."""
+CREAR CAMPAÑA ("crea una campaña", "hazme un anuncio de X"): usa meta_ads_crear_campana. Antes de llamarla, junta con el usuario: nombre, objetivo (trafico/ventas/interaccion/reconocimiento — si duda, "ventas" para vender producto), presupuesto diario, imagen (puede ser una URL de foto de producto de Shopify), texto principal, titular, link de destino y opcionalmente descripción/cta. La función SIEMPRE crea todo en PAUSA — nunca gasta sola. Después de crearla, dile al usuario que la revise en Ads Manager y que la active manualmente o te pida meta_ads_reanudar_campana.
+
+REGLA ABSOLUTA: a diferencia del Sheet, en Meta Ads SIEMPRE confirma con el usuario antes de pausar/reanudar una campaña, cambiar un presupuesto, o crear una campaña nueva — sin excepción, mostrando el cambio exacto (nombre de campaña, estado o presupuesto actual → nuevo, o el detalle completo de la campaña nueva). Es gasto publicitario real en curso."""
 
 
 def descargar_foto(file_id: str):
@@ -717,6 +738,12 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         resultado = meta_reanudar_campana(inp["campaign_id"])
                     elif name == "meta_ads_actualizar_presupuesto":
                         resultado = meta_actualizar_presupuesto(inp["campaign_id"], inp["presupuesto_diario"])
+                    elif name == "meta_ads_crear_campana":
+                        resultado = meta_crear_campana_completa(
+                            inp["nombre"], inp["objetivo"], inp["presupuesto_diario"], inp["imagen_url"],
+                            inp["texto_principal"], inp["titular"], inp["link_destino"],
+                            inp.get("descripcion", ""), inp.get("cta", "SHOP_NOW")
+                        )
                     else:
                         resultado = f"Herramienta desconocida: {name}"
                     last_tool_result = resultado
