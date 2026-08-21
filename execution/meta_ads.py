@@ -160,7 +160,7 @@ def crear_campana_completa(nombre: str, objetivo: str, presupuesto_diario: float
         # 1. Campaña
         r = requests.post(f"{BASE_URL}/{ACCOUNT_ID}/campaigns", data=_params({
             "name": nombre, "objective": objective, "status": "PAUSED",
-            "special_ad_categories": "[]"
+            "special_ad_categories": "[]", "is_adset_budget_sharing_enabled": "false"
         }), timeout=20)
         r.raise_for_status()
         campaign_id = r.json()["id"]
@@ -221,6 +221,12 @@ def crear_campana_completa(nombre: str, objetivo: str, presupuesto_diario: float
                 f"Revísala en Meta Ads Manager y actívala cuando estés list@ (o pídeme reanudar_campana).")
     except requests.HTTPError as e:
         detalle = e.response.text if e.response is not None else str(e)
+        if "development mode" in detalle:
+            return ("La campaña y el ad set se crearon bien, pero el anuncio con foto no se pudo publicar: "
+                    "la app de Meta todavía está en modo 'Development'. Camilo tiene que ir a "
+                    "developers.facebook.com → su app → Configuración básica → subir un ícono y agregar una "
+                    "URL de política de privacidad → cambiar el toggle de 'In development' a 'Live'. "
+                    "Una vez hecho eso, se puede reintentar crear la campaña.")
         return f"Error creando campaña: {detalle}"
     except Exception as e:
         return f"Error creando campaña: {e}"
