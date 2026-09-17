@@ -45,6 +45,11 @@ COTIZADOR_SHEET_ID = os.getenv(
     "COTIZADOR_SHEET_ID", "1SRji5gNT85HPLOXBgUhQdIRG7WZvTTWx6eDPEu6exKE")
 PESTANA_PARAMS = "Parámetros Cotizador"
 
+# Dónde quedan guardadas las cotizaciones. Por defecto, el mismo Cotizador Interno:
+# ahí ya viven los parámetros y la plantilla original. Si algún día se quieren en un
+# archivo aparte, basta con definir COTIZACIONES_SHEET_ID en el entorno.
+COTIZACIONES_SHEET_ID = os.getenv("COTIZACIONES_SHEET_ID", "") or COTIZADOR_SHEET_ID
+
 # Valores leídos de la hoja el 2026-09-17. Son el respaldo si la pestaña de
 # parámetros todavía no existe o el bot aún no tiene acceso al archivo.
 PARAMS_DEFECTO = {
@@ -73,13 +78,12 @@ PARAMS_DEFECTO = {
     "oz_esmalte_por_pieza":   0.0,    # onzas de esmalte que lleva una pieza
     "costo_vinilo":           0,
     "costo_empaque":          0,
-    # Las quemas NO son costo directo: su energía ya está dentro de servicios
-    # públicos, que se prorratea arriba (Camilo, 2026-09-17). Cargarlas aquí
-    # sería contarlas dos veces. Solo se llenan si algún día se mide el consumo
+    # UNA sola quema: el bizcocho se compra ya quemado, así que el taller solo
+    # hace la del esmalte (Camilo, 2026-09-17). Y va en cero porque su energía ya
+    # está dentro de servicios públicos, que se prorratea arriba: cargarla aquí
+    # sería contarla dos veces. Solo se llenaría si algún día se mide el consumo
     # por hornada y se saca de servicios.
-    "costo_quema_bizcocho":   0,
-    "costo_quema_esmalte":    0,
-    "costo_quema_transfer":   0,
+    "costo_quema":            0,
     # Minutos de los pasos que no son acabado (preparación, pulido, cargue…)
     "minutos_otros_pasos":    0.0,
 }
@@ -297,8 +301,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
                       if onzas else float(params["costo_esmaltes"]))
     materiales = (float(params["costo_bizcocho"]) + costo_esmaltes
                   + float(params["costo_vinilo"]))
-    quemas = (float(params["costo_quema_bizcocho"]) + float(params["costo_quema_esmalte"])
-              + float(params["costo_quema_transfer"]))
+    quemas = float(params.get("costo_quema", 0) or 0)
     empaque = float(params["costo_empaque"])
 
     # Las quemas no se listan: su energía ya va dentro de servicios públicos.
@@ -348,7 +351,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         "desglose": [
             ("Materiales (bizcocho, esmaltes, vinilo)", materiales),
             ("Mano de obra", costo_mo),
-            ("Quemas", quemas),
+            ("Quema del esmalte", quemas),
             ("Empaque", empaque),
             ("Desperdicio", desperdicio),
             ("Mercadeo", mercadeo),
@@ -384,7 +387,7 @@ def _nombre_pestana(r: dict, numero: str = "") -> str:
 
     try:
         from sheets import listar_pestanas
-        existentes = listar_pestanas(sheet_id=COTIZADOR_SHEET_ID)
+        existentes = listar_pestanas(sheet_id=COTIZACIONES_SHEET_ID)
     except Exception:
         existentes = ""
     if base not in existentes:
@@ -404,7 +407,7 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
 
     hoy = date.today().strftime("%d/%m/%Y")
     pestana = _nombre_pestana(r, numero)
-    respuesta = crear_pestana(pestana, sheet_id=COTIZADOR_SHEET_ID)
+    respuesta = crear_pestana(pestana, sheet_id=COTIZACIONES_SHEET_ID)
     if respuesta.startswith("Error"):
         return f"❌ No se pudo crear la hoja: {respuesta}"
 
@@ -425,7 +428,8 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
         ["", "", ""],
         ["COSTO POR PIEZA", "", ""],
     ]
-    notas_desglose = {"Quemas": "en cero: su energía ya va en servicios públicos"}
+    notas_desglose = {"Quema del esmalte": "única quema (el bizcocho se compra quemado); "
+                                           "en cero porque su energía va en servicios"}
     filas += [[etiqueta, round(valor), notas_desglose.get(etiqueta, "")]
               for etiqueta, valor in r["desglose"]]
     filas += [
@@ -450,20 +454,20 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
     filas += [[clave, valor, ""] for clave, valor in sorted(p.items())]
 
     escritura = escribir_rango(_rango(pestana, f"A1:C{len(filas)}"), filas,
-                               sheet_id=COTIZADOR_SHEET_ID)
+                               sheet_id=COTIZACIONES_SHEET_ID)
     if escritura.startswith("Error"):
         return f"❌ No se pudo escribir la hoja: {escritura}"
 
     # Índice, para verlas todas de un vistazo
-    if "creada" in crear_pestana(PESTANA_INDICE, sheet_id=COTIZADOR_SHEET_ID):
+    if "creada" in crear_pestana(PESTANA_INDICE, sheet_id=COTIZACIONES_SHEET_ID):
         escribir_rango(_rango(PESTANA_INDICE, "A1:H1"),
                        [["Fecha", "Número", "Producto", "Cantidad", "Tamaño",
                          "PVP sin IVA", "Total pedido con IVA", "Hoja"]],
-                       sheet_id=COTIZADOR_SHEET_ID)
+                       sheet_id=COTIZACIONES_SHEET_ID)
     agregar_fila(_rango(PESTANA_INDICE, "A:H"),
                  [hoy, numero, r.get("producto", ""), r["cantidad"], r["tamano"],
                   r["pvp_unitario"], r["total_pedido_con_iva"], pestana],
-                 sheet_id=COTIZADOR_SHEET_ID)
+                 sheet_id=COTIZACIONES_SHEET_ID)
 
     return f"📄 Detalle guardado en la pestaña '{pestana}' del Cotizador Interno."
 

@@ -34,12 +34,14 @@ x margen (40% sobre el costo)
 = PVP sin IVA   →  + IVA (19%)  =  precio final
 ```
 
-## Las quemas NO son costo directo
-La energía de las dos quemas ya está dentro de **servicios públicos**, que se prorratea
-por pieza más abajo. Cobrarlas además como línea de costo directo sería contarlas dos
-veces e inflar el precio (en una taza M, unos $17.000). Los parámetros
-`costo_quema_*` existen pero van en **cero**, y solo se llenarían si algún día se mide
-el consumo por hornada y se saca ese valor de servicios públicos.
+## La quema: una sola, y ya está en servicios
+El taller hace **una sola quema, la del esmalte**: el bizcocho se compra ya quemado
+(Camilo, 2026-09-17). Por eso hay un único parámetro `costo_quema`, no tres.
+
+Y va en **cero**, porque su energía ya está dentro de **servicios públicos**, que se
+prorratea por pieza más abajo. Cobrarla además como línea de costo directo sería
+contarla dos veces e inflar el precio. Solo se llenaría si algún día se mide el consumo
+por hornada y se saca ese valor de servicios públicos.
 
 Por eso `pct_uso_servicios` está en **70%** (decisión de Camilo, 2026-09-17), muy por
 encima del 20% del arriendo: el arriendo se reparte por metros cuadrados, pero la
@@ -125,6 +127,12 @@ Preguntables hoy: `costo_bizcocho`, `costo_esmaltes`, `costo_empaque`, `costo_vi
 
 La pestaña de parámetros se crea sola la primera vez que se guarda un valor, así que no
 hace falta correr el setup a mano.
+
+## Dónde quedan las cotizaciones
+En la misma hoja **Cotizador Interno**, que es donde ya viven los parámetros y la
+plantilla original. Si algún día conviene separarlas en otro archivo, se define
+`COTIZACIONES_SHEET_ID` en el entorno y se comparte ese archivo con la cuenta de
+servicio; no hay que tocar código.
 
 ## Cada cotización deja su hoja
 Cuando el precio ya es el definitivo, `guardar_hoja_cotizacion` crea en el Cotizador

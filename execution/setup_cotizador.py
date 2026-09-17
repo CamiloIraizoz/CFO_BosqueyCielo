@@ -36,9 +36,8 @@ NOTAS = {
     "costo_bizcocho":         "El bot lo pregunta — costo del bizcocho por pieza",
     "costo_esmaltes":         "El bot lo pregunta — esmaltes por pieza",
     "costo_vinilo":           "Vinilo/transfer por pieza (0 si no lleva)",
-    "costo_quema_bizcocho":   "Dejar en 0: la energía de las quemas ya está en servicios",
-    "costo_quema_esmalte":    "Dejar en 0: la energía de las quemas ya está en servicios",
-    "costo_quema_transfer":   "Dejar en 0: la energía de las quemas ya está en servicios",
+    "costo_quema":            "Única quema (el bizcocho se compra ya quemado). "
+                              "Dejar en 0: su energía ya está en servicios",
     "costo_empaque":          "El bot lo pregunta — empaque por pieza",
     "minutos_otros_pasos":    "El bot lo pregunta — minutos de los pasos que no son acabado",
 }
