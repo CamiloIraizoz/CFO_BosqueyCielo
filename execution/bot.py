@@ -560,6 +560,7 @@ REGLAS:
 MÓDULO COTIZADOR — CUÁNTO COBRAR
 ────────────────────────────────────────
 calcular_precio(...) → precio sugerido con desglose, según los costos reales del taller.
+Ver Directivas/cotizador.md
 
 CUÁNDO USARLO: siempre que pregunten "cuánto cobro por...", o pidan cotizar algo SIN
 dar el precio. Primero calcular_precio, después enviar_cotizacion con ese valor.
