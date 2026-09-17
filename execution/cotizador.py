@@ -349,11 +349,39 @@ def guardar_parametro(clave: str, valor) -> str:
         return f"No se pudo guardar {clave}: {e}"
 
 
+# Datos que se dan POR LÍNEA y mandan sobre el parámetro general. Un plato lleva
+# más bizcocho y más esmalte que un pocillo: cotizar los dos con el mismo costo de
+# material era la mayor imprecisión del motor.
+AJUSTES_LINEA = [
+    "costo_bizcocho", "oz_esmalte_por_pieza", "costo_esmaltes", "costo_vinilo",
+    "costo_empaque", "margen_pct",      # sobreescriben el parámetro general
+    "minutos_extra",                    # se suman al tiempo de la pieza
+    "descuento_pct",                    # baja el total de esa línea
+]
+
+
 def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             minutos_acabado: float = None, params: dict = None,
-            producto: str = "", tiempos: dict = None) -> dict:
-    """Calcula el precio de una pieza y del pedido. Devuelve el desglose completo."""
-    params = params or cargar_parametros()
+            producto: str = "", tiempos: dict = None,
+            ajustes: dict = None, notas: str = "",
+            cantidad_pedido: int = None) -> dict:
+    """Calcula el precio de una pieza y del pedido. Devuelve el desglose completo.
+
+    `ajustes` son los datos propios de esta línea (ver AJUSTES_LINEA). `cantidad_pedido`
+    es el total de piezas del pedido completo: sirve para que la advertencia de volumen
+    mire el pedido entero y no cada línea por separado.
+    """
+    params = dict(params or cargar_parametros())
+    ajustes = {k: v for k, v in (ajustes or {}).items()
+               if k in AJUSTES_LINEA and v not in (None, "")}
+    # Si la línea trae el esmalte en pesos, las onzas del parámetro general no aplican.
+    if "costo_esmaltes" in ajustes and "oz_esmalte_por_pieza" not in ajustes:
+        params["oz_esmalte_por_pieza"] = 0
+    for clave, valor in ajustes.items():
+        if clave in PARAMS_DEFECTO:
+            params[clave] = float(valor)
+    minutos_extra = float(ajustes.get("minutos_extra", 0) or 0)
+    descuento_pct = float(ajustes.get("descuento_pct", 0) or 0)
     advertencias = []
 
     if params.get("_origen") == "respaldo":
@@ -399,6 +427,9 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             "Sin medir: " + ", ".join(f"{e.lower()} ({tamano}/{dificultad})" for e in sin_medir)
             + ". Solo se está cobrando el acabado, así que el tiempo real es mayor.")
 
+    if minutos_extra:
+        minutos_por_etapa["Ajuste manual"] = minutos_extra
+
     minutos_totales = sum(minutos_por_etapa.values())
 
     horas_mes   = float(params["horas_semanales"]) * float(params["semanas_mes"])
@@ -435,9 +466,10 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     admin     = float(params["gastos_admin_mes"]) / volumen
     gran_total = directo_total + mercadeo + arriendo + admin
 
-    if cantidad < volumen * 0.2:
+    piezas_pedido = int(cantidad_pedido or cantidad)
+    if piezas_pedido < volumen * 0.2:
         advertencias.append(
-            f"El pedido ({cantidad} piezas) es chico frente al volumen de referencia "
+            f"El pedido ({piezas_pedido} piezas) es chico frente al volumen de referencia "
             f"({int(volumen)}/mes). Los fijos se reparten igual, así que este precio "
             f"solo se sostiene si el mes se llena con otros pedidos.")
 
@@ -452,6 +484,10 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
 
     iva     = pvp * float(params["iva_pct"]) / 100.0
     con_iva = pvp + iva
+
+    bruto_linea     = pvp * cantidad
+    descuento_linea = bruto_linea * descuento_pct / 100.0
+    total_linea     = bruto_linea - descuento_linea
 
     return {
         "producto": producto, "cantidad": int(cantidad),
@@ -477,12 +513,146 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         "iva_unitario":  round(iva),
         "precio_con_iva": round(con_iva),
         "margen_unitario": round(pvp - gran_total),
-        "total_pedido_sin_iva": round(pvp * cantidad),
-        "total_pedido_con_iva": round(con_iva * cantidad),
+        "descuento_pct":       descuento_pct,
+        "descuento_linea":     round(descuento_linea),
+        "bruto_linea":         round(bruto_linea),
+        "total_linea":         round(total_linea),
+        "minutos_extra":       round(minutos_extra, 1),
+        "ajustes":             ajustes,
+        "notas":               notas,
+        "total_pedido_sin_iva": round(total_linea),
+        "total_pedido_con_iva": round(total_linea * (1 + float(params["iva_pct"]) / 100.0)),
         "volumen_referencia": int(volumen),
         "advertencias": advertencias,
         "params_usados": {k: v for k, v in params.items() if not k.startswith("_")},
     }
+
+
+
+# ── Cotización de varios productos en un mismo pedido ───────────────────────
+# Un cliente casi nunca pide una sola referencia: pide 40 tazas, 20 platos y 10
+# materas. Cada línea se cotiza con SU tamaño, SU decoración y SUS materiales; lo
+# que se comparte es el pedido — descuento, urgencia, envío e IVA.
+CONDICIONES_DEFECTO = {
+    "descuento_pct": 0.0,    # descuento comercial sobre todo el pedido
+    "urgencia_pct":  0.0,    # recargo por entrega express
+    "envio":         0.0,    # flete, si se cobra
+    "desarrollo":    0.0,    # molde, prueba o diseño: se cobra una sola vez
+    "cobrar_iva":    True,
+    "validez_dias":  15,
+    "plazo":         "4-6 semanas hábiles",
+    "anticipo_pct":  50,
+    "notas":         "",
+}
+
+
+def cotizar_pedido(lineas: list, condiciones: dict = None, params: dict = None,
+                   tiempos: dict = None, cliente: str = "") -> dict:
+    """Cotiza varias referencias de una vez y arma los totales del pedido.
+
+    Cada línea es un dict: producto, cantidad, tamano, y la decoración por
+    pct_pintado/num_tintas/solo_relieve (o dificultad directa). Puede traer también
+    cualquiera de los AJUSTES_LINEA y `notas`.
+
+    Los parámetros y los tiempos se leen UNA vez y se pasan a todas las líneas: leerlos
+    por línea serían 20 llamadas a Sheets para un pedido de 10 referencias.
+    """
+    if not lineas:
+        raise ValueError("Un pedido necesita al menos una línea.")
+
+    cond = dict(CONDICIONES_DEFECTO)
+    cond.update({k: v for k, v in (condiciones or {}).items() if v not in (None, "")})
+
+    params = params or cargar_parametros()
+    tiempos = tiempos or cargar_tiempos()
+    piezas = sum(int(l.get("cantidad", 0) or 0) for l in lineas)
+
+    resultados, advertencias = [], []
+    for l in lineas:
+        dificultad = l.get("dificultad") or ""
+        if not dificultad:
+            dificultad = grado_acabado(float(l.get("pct_pintado", 50) or 0),
+                                       int(l.get("num_tintas", 0) or 0),
+                                       bool(l.get("solo_relieve")))
+        ajustes = {k: l[k] for k in AJUSTES_LINEA if k in l}
+        r = cotizar(int(l.get("cantidad", 1) or 1), l.get("tamano", "M"), dificultad,
+                    l.get("minutos_acabado"), params=params,
+                    producto=l.get("producto", ""), tiempos=tiempos,
+                    ajustes=ajustes, notas=l.get("notas", ""),
+                    cantidad_pedido=piezas)
+        r["pct_pintado"] = l.get("pct_pintado")
+        r["num_tintas"] = l.get("num_tintas")
+        resultados.append(r)
+        # Las advertencias se repiten línea por línea; en el pedido van una sola vez.
+        for a in r["advertencias"]:
+            if a not in advertencias:
+                advertencias.append(a)
+
+    # "Sin medir" sale una vez por tamaño/dificultad: en un pedido de 10 referencias
+    # serían 10 avisos diciendo lo mismo. Se colapsan en uno.
+    sin_medir = [a for a in advertencias if a.startswith("Sin medir:")]
+    if len(sin_medir) > 1:
+        advertencias = [a for a in advertencias if not a.startswith("Sin medir:")]
+        advertencias.insert(0, "Sin medir: preparación del bizcocho y terminado y empaque, "
+                               "en varias referencias. Solo se está cobrando el acabado, "
+                               "así que el tiempo real por pieza es mayor.")
+
+    subtotal   = sum(r["total_linea"] for r in resultados)
+    urgencia   = subtotal * float(cond["urgencia_pct"]) / 100.0
+    descuento  = (subtotal + urgencia) * float(cond["descuento_pct"]) / 100.0
+    envio      = float(cond["envio"] or 0)
+    desarrollo = float(cond["desarrollo"] or 0)
+    base       = subtotal + urgencia - descuento + envio + desarrollo
+    iva        = base * float(params["iva_pct"]) / 100.0 if cond["cobrar_iva"] else 0.0
+
+    return {
+        "cliente": cliente, "lineas": resultados, "piezas": piezas,
+        "condiciones": cond,
+        "subtotal":   round(subtotal),
+        "urgencia":   round(urgencia),
+        "descuento":  round(descuento),
+        "envio":      round(envio),
+        "desarrollo": round(desarrollo),
+        "base":       round(base),
+        "iva":        round(iva),
+        "total":      round(base + iva),
+        "anticipo":   round((base + iva) * float(cond["anticipo_pct"]) / 100.0),
+        "advertencias": advertencias,
+        "params_usados": {k: v for k, v in params.items() if not k.startswith("_")},
+    }
+
+
+def formato_telegram_pedido(r: dict) -> str:
+    """El pedido completo, línea por línea, en texto."""
+    cond = r["condiciones"]
+    lineas = [f"💰 Cotización{' para ' + r['cliente'] if r['cliente'] else ''} · "
+              f"{len(r['lineas'])} referencias · {r['piezas']} piezas", ""]
+    for i, l in enumerate(r["lineas"], start=1):
+        titulo = l["producto"] or f"Referencia {i}"
+        lineas.append(f"{i}. {titulo} — {l['cantidad']} x {l['tamano']}, "
+                      f"acabado {l['dificultad']}")
+        detalle = f"   {_fmt(l['pvp_unitario'])} c/u"
+        if l["descuento_pct"]:
+            detalle += f" · -{l['descuento_pct']:g}%"
+        lineas.append(detalle + f" = {_fmt(l['total_linea'])}")
+    lineas += ["", f"Subtotal: {_fmt(r['subtotal'])}"]
+    if r["urgencia"]:
+        lineas.append(f"Recargo por urgencia ({cond['urgencia_pct']:g}%): {_fmt(r['urgencia'])}")
+    if r["descuento"]:
+        lineas.append(f"Descuento ({cond['descuento_pct']:g}%): -{_fmt(r['descuento'])}")
+    if r["envio"]:
+        lineas.append(f"Envío: {_fmt(r['envio'])}")
+    if r["desarrollo"]:
+        lineas.append(f"Molde o desarrollo: {_fmt(r['desarrollo'])}")
+    if r["iva"]:
+        lineas.append(f"IVA: {_fmt(r['iva'])}")
+    lineas += [f"➡️ TOTAL: {_fmt(r['total'])}",
+               f"Anticipo {cond['anticipo_pct']:g}%: {_fmt(r['anticipo'])} · "
+               f"entrega {cond['plazo']} · validez {cond['validez_dias']} días"]
+    if r["advertencias"]:
+        lineas.append("")
+        lineas += [f"⚠️ {a}" for a in r["advertencias"]]
+    return "\n".join(lineas)
 
 
 PESTANA_INDICE = "Cotizaciones"
@@ -583,6 +753,71 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
     agregar_fila(_rango(PESTANA_INDICE, "A:H"),
                  [hoy, numero, r.get("producto", ""), r["cantidad"], r["tamano"],
                   r["pvp_unitario"], r["total_pedido_con_iva"], pestana],
+                 sheet_id=COTIZACIONES_SHEET_ID)
+
+    return f"📄 Detalle guardado en la pestaña '{pestana}' del Cotizador Interno."
+
+
+def guardar_hoja_pedido(r: dict, numero: str = "") -> str:
+    """Deja una pestaña con el pedido completo: una fila por referencia, los totales y
+    los parámetros usados. Es la versión de varias líneas de guardar_hoja_cotizacion."""
+    from datetime import date
+    from sheets import agregar_fila, crear_pestana, escribir_rango
+
+    hoy = date.today().strftime("%d/%m/%Y")
+    cond = r["condiciones"]
+    etiqueta = {"producto": (r.get("cliente") or "Pedido")}
+    pestana = _nombre_pestana(etiqueta, numero)
+    respuesta = crear_pestana(pestana, sheet_id=COTIZACIONES_SHEET_ID)
+    if respuesta.startswith("Error"):
+        return f"❌ No se pudo crear la hoja: {respuesta}"
+
+    filas = [
+        [f"COTIZACIÓN — {r.get('cliente') or 'Interna'}", "", "", "", "", "", ""],
+        ["Fecha", hoy, "Número", numero, "", "", ""],
+        ["", "", "", "", "", "", ""],
+        ["Producto", "Cantidad", "Tamaño", "Acabado", "Min/pieza", "PVP unitario", "Total línea"],
+    ]
+    for i, l in enumerate(r["lineas"], start=1):
+        filas.append([l["producto"] or f"Referencia {i}", l["cantidad"], l["tamano"],
+                      l["dificultad"], l["minutos_totales"], l["pvp_unitario"],
+                      l["total_linea"]])
+        if l.get("notas"):
+            filas.append(["", l["notas"], "", "", "", "", ""])
+
+    filas += [
+        ["", "", "", "", "", "", ""],
+        ["Subtotal", "", "", "", "", "", r["subtotal"]],
+        [f"Recargo urgencia ({cond['urgencia_pct']:g}%)", "", "", "", "", "", r["urgencia"]],
+        [f"Descuento ({cond['descuento_pct']:g}%)", "", "", "", "", "", -r["descuento"]],
+        ["Envío", "", "", "", "", "", r["envio"]],
+        ["Molde o desarrollo", "", "", "", "", "", r["desarrollo"]],
+        ["IVA", "", "", "", "", "", r["iva"]],
+        ["TOTAL", "", "", "", "", "", r["total"]],
+        [f"Anticipo ({cond['anticipo_pct']:g}%)", "", "", "", "", "", r["anticipo"]],
+    ]
+
+    if r.get("advertencias"):
+        filas += [["", "", "", "", "", "", ""], ["OJO", "", "", "", "", "", ""]]
+        filas += [["", a, "", "", "", "", ""] for a in r["advertencias"]]
+
+    filas += [["", "", "", "", "", "", ""],
+              ["PARÁMETROS USADOS", "", "", "", "", "", "para reproducir el cálculo"]]
+    filas += [[c, v, "", "", "", "", ""] for c, v in sorted(r["params_usados"].items())]
+
+    escritura = escribir_rango(_rango(pestana, f"A1:G{len(filas)}"), filas,
+                               sheet_id=COTIZACIONES_SHEET_ID)
+    if escritura.startswith("Error"):
+        return f"❌ No se pudo escribir la hoja: {escritura}"
+
+    if "creada" in crear_pestana(PESTANA_INDICE, sheet_id=COTIZACIONES_SHEET_ID):
+        escribir_rango(_rango(PESTANA_INDICE, "A1:H1"),
+                       [["Fecha", "Número", "Producto", "Cantidad", "Tamaño",
+                         "PVP sin IVA", "Total pedido con IVA", "Hoja"]],
+                       sheet_id=COTIZACIONES_SHEET_ID)
+    agregar_fila(_rango(PESTANA_INDICE, "A:H"),
+                 [hoy, numero, f"{len(r['lineas'])} referencias — {r.get('cliente', '')}".strip(" —"),
+                  r["piezas"], "", r["base"], r["total"], pestana],
                  sheet_id=COTIZACIONES_SHEET_ID)
 
     return f"📄 Detalle guardado en la pestaña '{pestana}' del Cotizador Interno."

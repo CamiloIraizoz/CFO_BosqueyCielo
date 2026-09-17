@@ -16,6 +16,45 @@ python3 execution/cotizador.py --cantidad 6 --tamano L --dificultad facil --minu
 Desde Telegram: tool `calcular_precio(...)` en `execution/bot.py`. Primero se calcula el
 precio, después se envía la cotización con `enviar_cotizacion`.
 
+Desde el navegador: **Taller Amphora**, https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j
+(`web/taller-amphora.html` en el repo). Repite la misma cadena en JavaScript, así que
+**cualquier cambio de fórmula hay que hacerlo en los dos lados** o el bot y la página
+darán precios distintos.
+
+## Un pedido, varias referencias
+Un cliente casi nunca pide una sola referencia. `cotizar_pedido(lineas, condiciones)`
+cotiza cada línea con su tamaño, su decoración y sus materiales, y arma los totales del
+pedido: subtotal → recargo por urgencia → descuento → envío → molde o desarrollo →
+IVA → total, más el anticipo.
+
+Dos cosas que solo aparecen con varias líneas y ya están resueltas:
+
+- La advertencia de "pedido chico frente al volumen de referencia" mira el **total de
+  piezas del pedido** (`cantidad_pedido`), no cada línea.
+- Las advertencias de "Sin medir" se colapsan en una sola; si no, un pedido de 10
+  referencias suelta 10 avisos idénticos.
+
+Los parámetros y los tiempos se leen **una vez** y se pasan a todas las líneas: leerlos
+por línea serían 20 llamadas a Sheets por cotización.
+
+El detalle del pedido se guarda con `guardar_hoja_pedido(r, numero)` — una fila por
+referencia y los totales abajo.
+
+## Datos por referencia (AJUSTES_LINEA)
+El parámetro general es el valor **típico**; el de la línea es la **excepción**. Un plato
+de 27 cm lleva más bizcocho y más esmalte que un pocillo, y cotizarlos igual era la mayor
+imprecisión del motor.
+
+| Ajuste | Qué hace |
+|---|---|
+| `costo_bizcocho`, `oz_esmalte_por_pieza`, `costo_esmaltes`, `costo_vinilo`, `costo_empaque` | Reemplazan el parámetro general solo en esa línea |
+| `margen_pct` | Margen distinto para esa referencia |
+| `minutos_extra` | Se suman al tiempo de la pieza (trabajo que el estándar no cubre) |
+| `descuento_pct` | Baja el total de esa línea |
+
+Si una línea trae `costo_esmaltes` en pesos y no trae onzas, las onzas del parámetro
+general se ignoran: si no, se cobrarían las dos cosas.
+
 ## La cadena de cálculo
 Réplica exacta de la hoja **Cotizador Interno** (pestaña *Costos Detallados*):
 

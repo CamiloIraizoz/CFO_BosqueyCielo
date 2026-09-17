@@ -25,7 +25,9 @@ from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
-    guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo
+    guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo, \
+    cotizar_pedido as _cotizar_pedido, formato_telegram_pedido as _cot_formato_pedido, \
+    guardar_hoja_pedido as _cot_guardar_hoja_pedido, AJUSTES_LINEA as _COT_AJUSTES
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -253,9 +255,55 @@ TOOLS = [
                 "pct_pintado": {"type": "number", "description": "% de la superficie que va pintada (0-100). Con num_tintas determina la dificultad."},
                 "num_tintas": {"type": "integer", "description": "Número de colores/tintas de la decoración"},
                 "solo_relieve": {"type": "boolean", "description": "true si la pintura va únicamente sobre el relieve (baja un grado de dificultad)"},
-                "minutos_acabado": {"type": "number", "description": "Minutos de acabado a mano. Solo si no hay estándar medido para ese tamaño/dificultad."}
+                "minutos_acabado": {"type": "number", "description": "Minutos de acabado a mano. Solo si no hay estándar medido para ese tamaño/dificultad."},
+                "costo_bizcocho": {"type": "number", "description": "Costo del bizcocho de ESTA pieza, si es distinto al normal (un plato grande cuesta más que un pocillo)"},
+                "oz_esmalte_por_pieza": {"type": "number", "description": "Onzas de esmalte de ESTA pieza, si son distintas a las normales"},
+                "costo_empaque": {"type": "number", "description": "Empaque de ESTA pieza, si es distinto al normal"},
+                "costo_vinilo": {"type": "number", "description": "Vinilo o transfer de ESTA pieza"},
+                "minutos_extra": {"type": "number", "description": "Minutos adicionales por trabajo que el estándar no cubre"},
+                "descuento_pct": {"type": "number", "description": "Descuento sobre esta referencia, en %"},
+                "cliente": {"type": "string", "description": "Nombre del cliente, para el encabezado"},
+                "lineas": {
+                    "type": "array",
+                    "description": "VARIAS referencias en una misma cotización (hasta 20). Úsalo cuando el pedido tenga más de un producto: '40 tazas, 20 platos y 6 materas'. Si lo usas, no llenes los campos de una sola pieza.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "producto":   {"type": "string"},
+                            "cantidad":   {"type": "integer"},
+                            "tamano":     {"type": "string", "description": "XS | S | M | L | XL"},
+                            "dificultad": {"type": "string", "description": "facil | medio | dificil. Mejor pasa pct_pintado y num_tintas."},
+                            "pct_pintado": {"type": "number"},
+                            "num_tintas":  {"type": "integer"},
+                            "solo_relieve": {"type": "boolean"},
+                            "minutos_acabado": {"type": "number"},
+                            "costo_bizcocho": {"type": "number"},
+                            "oz_esmalte_por_pieza": {"type": "number"},
+                            "costo_empaque": {"type": "number"},
+                            "costo_vinilo": {"type": "number"},
+                            "minutos_extra": {"type": "number"},
+                            "descuento_pct": {"type": "number"},
+                            "notas": {"type": "string", "description": "Detalle de esa referencia, sale en la cotización"}
+                        },
+                        "required": ["cantidad", "tamano"]
+                    }
+                },
+                "condiciones": {
+                    "type": "object",
+                    "description": "Lo que aplica a TODO el pedido, no a una referencia.",
+                    "properties": {
+                        "descuento_pct": {"type": "number", "description": "Descuento comercial sobre el pedido"},
+                        "urgencia_pct":  {"type": "number", "description": "Recargo por entrega más rápida de lo normal"},
+                        "envio":         {"type": "number", "description": "Flete en pesos"},
+                        "desarrollo":    {"type": "number", "description": "Molde, prueba o diseño: se cobra una sola vez"},
+                        "cobrar_iva":    {"type": "boolean"},
+                        "anticipo_pct":  {"type": "number"},
+                        "validez_dias":  {"type": "integer"},
+                        "plazo":         {"type": "string", "description": "Ej: '4-6 semanas hábiles'"}
+                    }
+                }
             },
-            "required": ["cantidad", "tamano"]
+            "required": []
         }
     },
 
@@ -270,9 +318,13 @@ TOOLS = [
                 "tamano":    {"type": "string", "description": "XS | S | M | L | XL"},
                 "dificultad": {"type": "string", "description": "facil | medio | dificil"},
                 "minutos_acabado": {"type": "number"},
-                "numero":    {"type": "string", "description": "Número de cotización si ya existe (ej. BYC-604084)"}
+                "numero":    {"type": "string", "description": "Número de cotización si ya existe (ej. BYC-604084)"},
+                "cliente":   {"type": "string"},
+                "lineas":    {"type": "array", "description": "Las mismas líneas que pasaste a calcular_precio, si el pedido tiene varias referencias.",
+                              "items": {"type": "object"}},
+                "condiciones": {"type": "object", "description": "Las mismas condiciones que pasaste a calcular_precio."}
             },
-            "required": ["cantidad", "tamano"]
+            "required": []
         }
     },
     {
@@ -615,6 +667,22 @@ decoración ("pintada a la mitad, 2 colores"), pasa pct_pintado=50 y num_tintas=
 script aplica la regla del Discovery. Solo usa "dificultad" si el usuario dice
 textualmente fácil, medio o difícil.
 
+PEDIDOS CON VARIAS REFERENCIAS: cuando el pedido tenga más de un producto ("40 tazas,
+20 platos y 6 materas"), pasa la lista en `lineas` y NO llames calcular_precio tres
+veces: así los costos fijos se reparten bien, el descuento y el envío se aplican al
+pedido completo y sale un solo total. En `condiciones` van descuento, recargo por
+urgencia, envío, molde o desarrollo, anticipo, validez y plazo.
+
+DATOS POR REFERENCIA: cada línea puede traer sus propios materiales y son los que mandan
+(costo_bizcocho, oz_esmalte_por_pieza, costo_empaque, costo_vinilo), además de
+minutos_extra y descuento_pct. Un plato de 27 cm lleva más bizcocho y más esmalte que un
+pocillo: si el usuario te lo dice, pásalo en esa línea en vez de cambiar el parámetro
+general. El parámetro general es el valor típico; el de la línea es la excepción.
+
+LA PÁGINA: Camilo y Daniela también cotizan desde https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j
+(Taller Amphora). Usa la misma fórmula, así que los precios deben coincidir. Si alguien
+pregunta por "la página" o "el cotizador visual", es esa.
+
 TAMAÑO: si no lo dicen, dedúcelo del tipo de pieza y AVISA qué asumiste
 ("asumí tamaño M, una taza estándar"). XS/S piezas pequeñas · M taza o plato de 27cm ·
 L jarra o pieza de 2kg · XL matera grande de 4kg+.
@@ -880,24 +948,41 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                                 datos, paquete, inp.get("deal_id", ""))
                     # ── Cotizador ───────────────────────────────────────────
                     elif name == "calcular_precio":
-                        _dificultad = inp.get("dificultad", "")
-                        if not _dificultad and inp.get("pct_pintado") is not None:
-                            _dificultad = _grado_acabado(
-                                inp.get("pct_pintado", 0), inp.get("num_tintas", 1),
-                                inp.get("solo_relieve", False))
                         try:
-                            resultado = _cot_formato(_cotizar(
-                                inp["cantidad"], inp["tamano"], _dificultad or "medio",
-                                inp.get("minutos_acabado"), producto=inp.get("producto", "")))
+                            if inp.get("lineas"):
+                                resultado = _cot_formato_pedido(_cotizar_pedido(
+                                    inp["lineas"], inp.get("condiciones"),
+                                    cliente=inp.get("cliente", "")))
+                            elif not inp.get("cantidad") or not inp.get("tamano"):
+                                resultado = ("Para cotizar necesito la cantidad y el tamaño "
+                                             "(o la lista de referencias del pedido).")
+                            else:
+                                _dificultad = inp.get("dificultad", "")
+                                if not _dificultad and inp.get("pct_pintado") is not None:
+                                    _dificultad = _grado_acabado(
+                                        inp.get("pct_pintado", 0), inp.get("num_tintas", 1),
+                                        inp.get("solo_relieve", False))
+                                resultado = _cot_formato(_cotizar(
+                                    inp["cantidad"], inp["tamano"], _dificultad or "medio",
+                                    inp.get("minutos_acabado"), producto=inp.get("producto", ""),
+                                    ajustes={k: inp[k] for k in _COT_AJUSTES if k in inp}))
                         except ValueError as e:
                             resultado = f"No se pudo calcular: {e}"
                     elif name == "guardar_hoja_cotizacion":
                         try:
-                            _r = _cotizar(inp["cantidad"], inp["tamano"],
-                                          inp.get("dificultad", "medio"),
-                                          inp.get("minutos_acabado"),
-                                          producto=inp.get("producto", ""))
-                            resultado = _cot_guardar_hoja(_r, inp.get("numero", ""))
+                            if inp.get("lineas"):
+                                _r = _cotizar_pedido(inp["lineas"], inp.get("condiciones"),
+                                                     cliente=inp.get("cliente", ""))
+                                resultado = _cot_guardar_hoja_pedido(_r, inp.get("numero", ""))
+                            elif not inp.get("cantidad") or not inp.get("tamano"):
+                                resultado = "Para guardar la hoja necesito la cantidad y el tamaño."
+                            else:
+                                _r = _cotizar(inp["cantidad"], inp["tamano"],
+                                              inp.get("dificultad", "medio"),
+                                              inp.get("minutos_acabado"),
+                                              producto=inp.get("producto", ""),
+                                              ajustes={k: inp[k] for k in _COT_AJUSTES if k in inp})
+                                resultado = _cot_guardar_hoja(_r, inp.get("numero", ""))
                         except ValueError as e:
                             resultado = f"No se pudo guardar la hoja: {e}"
                     elif name == "guardar_tiempo_estandar":

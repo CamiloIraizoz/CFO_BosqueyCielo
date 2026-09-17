@@ -24,9 +24,19 @@ personal (camilo.iraizoz@gmail.com), con `db`, `user` y `downloads`, y con
 Para actualizarla desde otra conversación hay que pasar esa URL como `url` al publicar;
 sin eso se crea un artifact aparte. Es privada hasta que se comparta desde su menú.
 
+Versión 2 (2026-09-17): cotiza hasta **20 referencias en un mismo pedido**, cada una con
+sus propios materiales, minutos extra y descuento; condiciones del pedido (descuento,
+urgencia, envío, molde, anticipo, validez, plazo, IVA); y una pestaña **Ajustes** donde
+se editan los parámetros del taller y la tabla de tiempos estándar.
+
 **Ojo con la duplicación:** la página recalcula el precio en JavaScript con la misma
 cadena que `execution/cotizador.py`. Si se cambia la fórmula en un lado hay que
 cambiarla en el otro, o el bot y la página darán precios distintos.
+
+**Ojo con los parámetros:** la página los guarda en su propia base (`config/parametros`)
+y el bot los lee de la hoja *Cotizador Interno*. Son dos sitios distintos: si se cambia
+un costo en la pestaña Ajustes, hay que decírselo también al bot (o escribirlo en la
+hoja) para que los dos coticen igual. La página lo advierte en pantalla.
 
 ### 2. Cargar los costos que faltan
 El precio sale **por debajo del real** hasta que estén. El bot los pregunta solo por

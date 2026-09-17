@@ -41,79 +41,143 @@
     position:sticky; top:env(safe-area-inset-top, 0px); z-index:20;
     background:var(--surface); border-bottom:1px solid var(--line);
   }
-  .head-in { max-width:1120px; margin:0 auto; padding:14px 20px 0;
+  .head-in { max-width:1180px; margin:0 auto; padding:14px 20px 0;
              display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; }
   .marca { font-family:var(--serif); font-size:20px; }
   .marca span { color:var(--accent); }
   .sub { font-size:11px; color:var(--muted); letter-spacing:.14em; text-transform:uppercase; }
   .quien { margin-left:auto; font-size:12px; color:var(--muted); }
-  .tabs { max-width:1120px; margin:0 auto; padding:10px 20px 0; display:flex; gap:4px; }
+  .tabs { max-width:1180px; margin:0 auto; padding:10px 20px 0; display:flex; gap:4px; }
   .tab { background:none; border:0; border-bottom:2px solid transparent; cursor:pointer;
          padding:8px 14px 10px; color:var(--muted); font-weight:500; border-radius:6px 6px 0 0; }
   .tab:hover { color:var(--ink); }
   .tab[aria-selected="true"] { color:var(--accent-deep); border-bottom-color:var(--accent); }
   .tab:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 
-  main { max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:22px 64px; }
+  main { max-width:1180px; margin:0 auto; padding-inline:20px; padding-block:22px 72px; }
 
-  /* ── Cotizador ────────────────────────────────────────── */
-  .cotiza { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,380px); gap:22px; align-items:start; }
-  @media (max-width:880px) { .cotiza { grid-template-columns:1fr; } }
+  /* ── Estructura ───────────────────────────────────────── */
+  .cotiza { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,352px); gap:22px; align-items:start; }
+  @media (max-width:940px) { .cotiza { grid-template-columns:1fr; } }
 
   .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:20px; }
-  .panel + .panel { margin-top:16px; }
+  .panel + .panel, .panel + .items, .items + .panel { margin-top:16px; }
   .panel h2 { font-size:17px; margin-bottom:4px; }
   .panel .pista { color:var(--muted); font-size:13px; margin:0 0 16px; }
+  .panel .pista:last-child { margin-bottom:0; }
 
   .campo { display:block; margin-bottom:14px; }
   .campo > span { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
                   color:var(--muted); margin-bottom:5px; }
+  .campo small { display:block; font-size:11.5px; color:var(--muted); margin-top:4px;
+                 text-transform:none; letter-spacing:0; }
   input[type="text"], input[type="number"], input[type="date"], select, textarea {
     width:100%; background:var(--ground); border:1px solid var(--line);
     border-radius:8px; padding:9px 11px; }
+  textarea { resize:vertical; min-height:56px; }
   input:focus-visible, select:focus-visible, textarea:focus-visible {
     outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
+  input:disabled, select:disabled, textarea:disabled { opacity:.55; }
   .fila { display:flex; gap:12px; flex-wrap:wrap; }
   .fila > * { flex:1 1 150px; }
+  .check { display:flex; align-items:center; gap:9px; flex:1 1 220px; margin-bottom:14px; }
+  .check input { width:auto; }
+  .check span { font-size:14px; }
 
   .segmented { display:flex; gap:6px; flex-wrap:wrap; }
-  .seg { flex:1 1 auto; min-width:52px; text-align:center; cursor:pointer;
-         border:1px solid var(--line); background:var(--ground); border-radius:8px; padding:9px 6px; }
+  .seg { flex:1 1 auto; min-width:48px; text-align:center; cursor:pointer;
+         border:1px solid var(--line); background:var(--ground); border-radius:8px; padding:8px 6px; }
   .seg[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
   .seg small { display:block; font-size:10px; opacity:.72; font-weight:400; }
   .seg:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 
   input[type="range"] { width:100%; accent-color:var(--accent); }
-  .grado { display:inline-flex; align-items:center; gap:7px; font-size:13px;
+  .grado { display:inline-flex; align-items:center; gap:7px; font-size:12.5px;
            background:var(--accent-wash); color:var(--accent-deep);
-           border-radius:999px; padding:5px 12px; font-weight:500; }
+           border-radius:999px; padding:4px 11px; font-weight:500; white-space:nowrap; }
+
+  /* ── Referencias del pedido ───────────────────────────── */
+  .items { display:grid; gap:14px; }
+  .item { background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+          padding:15px 17px; display:grid; gap:13px; }
+  .item.mal { border-color:var(--crit); }
+  .i-top { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .i-n { width:24px; height:24px; flex:0 0 24px; border-radius:99px; background:var(--accent-wash);
+         color:var(--accent-deep); font-size:12px; font-weight:600;
+         display:flex; align-items:center; justify-content:center; }
+  .i-prod { flex:1 1 220px; }
+  .i-cant { flex:0 0 92px; }
+  .i-precio { margin-left:auto; text-align:right; white-space:nowrap; }
+  .i-precio b { font-family:var(--serif); font-size:19px; font-weight:600; display:block; }
+  .i-precio small { color:var(--muted); font-size:11.5px; }
+  .i-herr { display:flex; gap:4px; }
+  .icono { cursor:pointer; background:none; border:1px solid var(--line); border-radius:7px;
+           width:30px; height:30px; color:var(--muted); line-height:1; }
+  .icono:hover { color:var(--ink); border-color:var(--muted); }
+  .icono:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .i-linea { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .i-linea > .segmented { flex:1 1 240px; }
+  .i-deco { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:14px; align-items:end; }
+  @media (max-width:620px) { .i-deco { grid-template-columns:1fr; } }
+  .i-deco .campo { margin-bottom:0; }
+
+  details.mas { border-top:1px solid var(--line); padding-top:11px; }
+  details.mas > summary { cursor:pointer; font-size:12.5px; color:var(--accent-deep);
+                          list-style:none; display:flex; align-items:center; gap:6px; }
+  details.mas > summary::-webkit-details-marker { display:none; }
+  details.mas > summary::before { content:"▸"; font-size:10px; }
+  details.mas[open] > summary::before { content:"▾"; }
+  details.mas > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  .mas-cuerpo { padding-top:13px; }
+  .rejilla { display:grid; grid-template-columns:repeat(auto-fit, minmax(146px, 1fr)); gap:12px; }
+  .rejilla .campo { margin-bottom:0; }
+
+  .mini { list-style:none; margin:12px 0 0; padding:0; font-size:12.5px; }
+  .mini li { display:flex; justify-content:space-between; gap:12px; padding:3px 0; color:var(--muted); }
+  .mini li b { color:var(--ink); font-weight:500; }
+
+  .agregar { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .conteo { color:var(--muted); font-size:12.5px; }
 
   /* ── Resultado ────────────────────────────────────────── */
   .resultado { position:sticky; top:calc(env(safe-area-inset-top, 0px) + 116px); }
-  @media (max-width:880px) { .resultado { position:static; } }
-  .precio { font-family:var(--serif); font-size:38px; line-height:1.05; letter-spacing:-.01em; }
+  @media (max-width:940px) { .resultado { position:static; } }
+  .precio { font-family:var(--serif); font-size:36px; line-height:1.05; letter-spacing:-.01em; }
   .precio-nota { color:var(--muted); font-size:13px; margin-top:4px; }
   .desglose { list-style:none; margin:18px 0 0; padding:0; border-top:1px solid var(--line); }
   .desglose li { display:flex; justify-content:space-between; gap:12px;
                  padding:7px 0; border-bottom:1px solid var(--line); font-size:14px; }
   .desglose li.total { font-weight:600; border-bottom:0; padding-top:11px; }
+  .desglose li.suave span { color:var(--muted); font-size:13px; }
   .desglose li span:first-child { color:var(--muted); }
-  .desglose li.total span:first-child { color:var(--ink); }
+  .desglose li.total span:first-child, .desglose li.ref span:first-child { color:var(--ink); }
 
   .avisos { margin-top:16px; display:grid; gap:8px; }
   .aviso { display:flex; gap:9px; font-size:13px; line-height:1.45;
            background:var(--surface-2); border-left:3px solid var(--warn);
            border-radius:0 8px 8px 0; padding:10px 12px; }
   .aviso.duro { border-left-color:var(--crit); }
+  .aviso.bien { border-left-color:var(--ok); }
 
   .acciones { display:flex; gap:9px; flex-wrap:wrap; margin-top:18px; }
   .btn { cursor:pointer; border:1px solid var(--accent); background:var(--accent); color:#fff;
          border-radius:8px; padding:10px 16px; font-weight:500; }
   .btn.sec { background:transparent; color:var(--accent-deep); }
-  .btn.fantasma { background:transparent; border-color:var(--line); color:var(--ink); }
+  .btn.fantasma { background:transparent; border-color:var(--line); color:var(--muted); }
   .btn:hover { filter:brightness(1.06); }
   .btn:disabled { opacity:.45; cursor:not-allowed; filter:none; }
   .btn:focus-visible { outline:2px solid var(--accent-deep); outline-offset:2px; }
+
+  /* ── Ajustes ──────────────────────────────────────────── */
+  .tabla-tiempos { width:100%; border-collapse:collapse; font-size:14px; }
+  .tabla-tiempos th { font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+                      color:var(--muted); font-weight:500; text-align:left; padding:6px 8px 6px 0; }
+  .tabla-tiempos td { padding:4px 8px 4px 0; }
+  .tabla-tiempos td:first-child { font-weight:500; width:64px; }
+  .tabla-tiempos input { padding:7px 9px; }
+  .grupo-tiempos + .grupo-tiempos { margin-top:20px; }
+  .grupo-tiempos h3 { font-size:15px; margin-bottom:2px; }
+  .grupo-tiempos p { color:var(--muted); font-size:12.5px; margin:0 0 10px; }
 
   /* ── Producción ───────────────────────────────────────── */
   .proyectos { display:grid; gap:14px; }
@@ -144,7 +208,7 @@
   .toast { position:fixed; left:50%; transform:translateX(-50%);
            bottom:calc(env(safe-area-inset-bottom, 0px) + 22px); z-index:50;
            background:var(--ink); color:var(--ground); padding:10px 18px; border-radius:99px;
-           box-shadow:var(--shadow); font-size:14px; }
+           box-shadow:var(--shadow); font-size:14px; max-width:86vw; text-align:center; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 
@@ -159,6 +223,7 @@
   <div class="tabs" role="tablist">
     <button class="tab" id="tab-cotizador" role="tab" aria-selected="true" aria-controls="vista-cotizador">Cotizador</button>
     <button class="tab" id="tab-produccion" role="tab" aria-selected="false" aria-controls="vista-produccion">Producción</button>
+    <button class="tab" id="tab-ajustes" role="tab" aria-selected="false" aria-controls="vista-ajustes">Ajustes</button>
   </div>
 </header>
 
@@ -168,59 +233,81 @@
     <div class="cotiza">
       <div>
         <div class="panel">
-          <h2>La pieza</h2>
-          <p class="pista">El tamaño va por peso: XS y S son piezas pequeñas, M una taza o un plato de 27 cm, L una jarra de 2 kg, XL una matera de 4 kg o más.</p>
-
-          <label class="campo" for="f-producto">
-            <span>Producto</span>
-            <input type="text" id="f-producto" placeholder="Taza cónica 250 ml" autocomplete="off">
-          </label>
-
+          <h2>El pedido</h2>
+          <p class="pista">Una cotización puede llevar hasta 20 referencias distintas. Cada una se calcula con su propio tamaño, su decoración y sus materiales.</p>
           <div class="fila">
-            <label class="campo" for="f-cantidad">
-              <span>Cantidad</span>
-              <input type="number" id="f-cantidad" min="1" step="1" value="50" class="num">
+            <label class="campo" for="c-cliente">
+              <span>Cliente</span>
+              <input type="text" id="c-cliente" placeholder="Café del Valle" autocomplete="off">
             </label>
-            <label class="campo" for="f-cliente">
-              <span>Cliente (opcional)</span>
-              <input type="text" id="f-cliente" placeholder="Café del Valle" autocomplete="off">
+            <label class="campo" for="c-contacto">
+              <span>Contacto (opcional)</span>
+              <input type="text" id="c-contacto" placeholder="Ana Ruiz · 310 000 0000" autocomplete="off">
             </label>
-          </div>
-
-          <div class="campo">
-            <span>Tamaño</span>
-            <div class="segmented" id="f-tamano"></div>
+            <label class="campo" for="c-numero">
+              <span>N° de cotización</span>
+              <input type="text" id="c-numero" class="num" autocomplete="off">
+            </label>
           </div>
         </div>
 
+        <div class="items" id="lista-items"></div>
+
+        <div class="agregar">
+          <button class="btn sec" id="b-agregar">+ Agregar referencia</button>
+          <span class="conteo" id="conteo">&nbsp;</span>
+        </div>
+
         <div class="panel">
-          <h2>La decoración</h2>
-          <p class="pista">De esto sale la dificultad del acabado, y con ella los minutos de trabajo. La regla es la del Discovery: cuánta superficie se pinta y con cuántas tintas.</p>
-
-          <label class="campo" for="f-pintado">
-            <span>Superficie pintada — <b id="f-pintado-val" class="num">50%</b></span>
-            <input type="range" id="f-pintado" min="0" max="100" step="5" value="50">
-          </label>
-
-          <div class="fila">
-            <label class="campo" for="f-tintas">
-              <span>Número de tintas</span>
-              <input type="number" id="f-tintas" min="0" max="12" step="1" value="2" class="num">
+          <h2>Condiciones</h2>
+          <p class="pista">Lo que aplica al pedido completo, no a una referencia. Todo esto sale impreso en el PDF.</p>
+          <div class="rejilla">
+            <label class="campo" for="c-desc">
+              <span>Descuento %</span>
+              <input type="number" id="c-desc" class="num" min="0" max="60" step="1" value="0">
             </label>
-            <label class="campo" for="f-relieve" style="display:flex; align-items:center; gap:9px; flex:1 1 220px;">
-              <input type="checkbox" id="f-relieve" style="width:auto;">
-              <span style="margin:0; text-transform:none; letter-spacing:0; font-size:14px; color:var(--ink);">La pintura va solo sobre el relieve</span>
+            <label class="campo" for="c-urgencia">
+              <span>Recargo urgencia %</span>
+              <input type="number" id="c-urgencia" class="num" min="0" max="100" step="5" value="0">
+              <small>Entregas más rápidas que el plazo normal.</small>
+            </label>
+            <label class="campo" for="c-envio">
+              <span>Envío $</span>
+              <input type="number" id="c-envio" class="num" min="0" step="1000" value="0">
+            </label>
+            <label class="campo" for="c-desarrollo">
+              <span>Molde o desarrollo $</span>
+              <input type="number" id="c-desarrollo" class="num" min="0" step="1000" value="0">
+              <small>Se cobra una sola vez, no por pieza.</small>
+            </label>
+            <label class="campo" for="c-anticipo">
+              <span>Anticipo %</span>
+              <input type="number" id="c-anticipo" class="num" min="0" max="100" step="5" value="50">
+            </label>
+            <label class="campo" for="c-validez">
+              <span>Validez (días)</span>
+              <input type="number" id="c-validez" class="num" min="1" max="120" step="1" value="15">
+            </label>
+            <label class="campo" for="c-plazo">
+              <span>Plazo de entrega</span>
+              <input type="text" id="c-plazo" value="4-6 semanas hábiles" autocomplete="off">
             </label>
           </div>
-
-          <div class="grado" id="f-grado">Acabado medio</div>
+          <label class="check" for="c-iva" style="margin-top:12px;">
+            <input type="checkbox" id="c-iva" checked>
+            <span>Cobrar IVA (19%)</span>
+          </label>
+          <label class="campo" for="c-notas" style="margin-bottom:0;">
+            <span>Notas para el cliente</span>
+            <textarea id="c-notas" placeholder="Los colores pueden variar levemente entre piezas por ser hechas a mano."></textarea>
+          </label>
         </div>
       </div>
 
       <!-- Resultado -->
       <div class="resultado">
         <div class="panel">
-          <h2>Precio sugerido</h2>
+          <h2>El pedido</h2>
           <p class="pista" id="r-contexto">&nbsp;</p>
           <div class="precio num" id="r-precio">—</div>
           <div class="precio-nota" id="r-nota"></div>
@@ -231,7 +318,8 @@
 
           <div class="acciones">
             <button class="btn" id="b-pdf">Descargar PDF</button>
-            <button class="btn sec" id="b-guardar">Guardar cotización</button>
+            <button class="btn sec" id="b-guardar">Guardar</button>
+            <button class="btn fantasma" id="b-limpiar">Empezar de nuevo</button>
           </div>
         </div>
       </div>
@@ -265,6 +353,31 @@
       <div class="cargando">Cargando proyectos…</div>
     </div>
   </section>
+
+  <!-- ══ AJUSTES ════════════════════════════════════════ -->
+  <section id="vista-ajustes" role="tabpanel" aria-labelledby="tab-ajustes" hidden>
+    <div id="ajustes-lectura"></div>
+
+    <div class="panel">
+      <h2>Parámetros del taller</h2>
+      <p class="pista">De acá sale el precio de todo. Lo que cambies queda guardado para todos los que abran esta página.</p>
+      <div class="rejilla" id="rejilla-params"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Tiempos estándar</h2>
+      <p class="pista">Minutos por pieza, por etapa, tamaño y dificultad. Lo que esté vacío no se cobra: por eso conviene cronometrarlo en planta. El acabado ya viene del Discovery.</p>
+      <div id="grupos-tiempos"></div>
+    </div>
+
+    <div class="panel">
+      <div class="acciones" style="margin-top:0;">
+        <button class="btn" id="b-guardar-ajustes">Guardar ajustes</button>
+        <button class="btn fantasma" id="b-descartar">Descartar cambios</button>
+      </div>
+      <p class="pista" style="margin:14px 0 0;">Esto cambia el precio en la página. El bot de Telegram lee los mismos números de la hoja <b>Cotizador Interno</b>: si cambias algo acá, dile al bot o escríbelo también en la hoja para que los dos coticen igual.</p>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -273,9 +386,8 @@
 
   // ───────────────────────────────────────────────────────────────────
   // Parámetros de respaldo. Los de verdad viven en la base de la página
-  // (documento config/parametros) y los mantiene Claude sincronizados con
-  // la hoja "Cotizador Interno". Estos son el espejo del 2026-09-17, para
-  // que la página funcione aunque no haya base disponible.
+  // (documento config/parametros). Estos son el espejo del 2026-09-17,
+  // para que la página funcione aunque no haya base disponible.
   // ───────────────────────────────────────────────────────────────────
   var PARAMS = {
     salario_mensual: 4000000, horas_semanales: 48, semanas_mes: 4,
@@ -289,6 +401,29 @@
     costo_quema: 0, minutos_otros_pasos: 0
   };
 
+  // Cómo se muestra cada parámetro en la pestaña de Ajustes.
+  var FICHA_PARAMS = [
+    ["salario_mensual",     "Salario mensual",            "$",   "Lo que cuesta un puesto de taller al mes"],
+    ["horas_semanales",     "Horas por semana",           "h",   ""],
+    ["semanas_mes",         "Semanas por mes",            "",    ""],
+    ["volumen_referencia",  "Piezas al mes",              "",    "Entre estas se reparten los costos fijos"],
+    ["gastos_admin_mes",    "Gastos administrativos",     "$",   "Contador, gerencia, supervisión"],
+    ["arriendo_mes",        "Arriendo",                   "$",   ""],
+    ["servicios_mes",       "Servicios públicos",         "$",   "Incluye la energía de las quemas"],
+    ["pct_uso_local",       "% del local en producción",  "%",   ""],
+    ["pct_uso_servicios",   "% de servicios a producción","%",   "Los hornos consumen más que el resto"],
+    ["costo_bizcocho",      "Bizcocho por pieza",         "$",   "Valor típico; se puede cambiar por referencia"],
+    ["precio_oz_esmalte",   "Esmalte por onza",           "$",   "Galón de 128 oz a $260.000 = $2.031/oz"],
+    ["oz_esmalte_por_pieza","Onzas de esmalte por pieza", "oz",  "Valor típico; se puede cambiar por referencia"],
+    ["costo_empaque",       "Empaque por pieza",          "$",   ""],
+    ["costo_vinilo",        "Vinilo o transfer por pieza","$",   "0 si no lleva"],
+    ["minutos_otros_pasos", "Minutos de otros pasos",     "min", "Respaldo mientras no haya tiempos medidos"],
+    ["desperdicio_pct",     "Desperdicio",                "%",   "Piezas que se pierden en el proceso"],
+    ["mercadeo_pct",        "Mercadeo",                   "%",   ""],
+    ["margen_pct",          "Margen",                     "%",   "Sobre el costo total"],
+    ["iva_pct",             "IVA",                        "%",   ""]
+  ];
+
   // Minutos por pieza. Solo el acabado está medido (Discovery 2026-09).
   var TIEMPOS = {
     "Preparación del bizcocho": { XS:{}, S:{}, M:{}, L:{}, XL:{} },
@@ -301,11 +436,19 @@
     },
     "Terminado y empaque": { XS:{}, S:{}, M:{}, L:{}, XL:{} }
   };
+  var PISTA_ETAPA = {
+    "Preparación del bizcocho": "Pulir y limpiar la pieza antes de esmaltar.",
+    "Acabado": "Esmalte de color, transparente, letras y reverso.",
+    "Terminado y empaque": "Sellos y firmas, cargue del horno, pulido final y empaque."
+  };
 
   var TAMANOS = [
     {id:"XS", nota:"muy pequeña"}, {id:"S", nota:"0,65 kg"},
     {id:"M", nota:"1,2 kg"}, {id:"L", nota:"2 kg"}, {id:"XL", nota:"4 kg +"}
   ];
+  var DIFICULTADES = ["facil", "medio", "dificil"];
+  var NOMBRE_DIF = { facil:"fácil", medio:"medio", dificil:"difícil" };
+  var MAX_ITEMS = 20;
 
   var ETAPAS = {
     bizcocho: ["esmaltado inicial","pintar bizcocho","primera quema","acabado","empaque","entregado"],
@@ -313,12 +456,13 @@
   };
 
   // ── Estado ────────────────────────────────────────────────────────
-  var entrada = { producto:"", cliente:"", cantidad:50, tamano:"M", pintado:50, tintas:2, relieve:false };
-  var ultimo = null;          // último cálculo
+  var cot = null;             // la cotización que se está armando
+  var ultimo = null;          // último cálculo del pedido completo
   var db = null, downloads = null, user = null, miId = null;
   var puedeEscribir = null;   // null = todavía no sabemos
   var proyectos = [];
   var nombres = {};
+  var seq = 0;
 
   // ── Utilidades ────────────────────────────────────────────────────
   function $(id) { return document.getElementById(id); }
@@ -326,17 +470,55 @@
     var v = Math.round(Number(n) || 0);
     return "$" + v.toLocaleString("es-CO").replace(/,/g, ".");
   }
+  function numero(v, porDefecto) {
+    var n = parseFloat(v);
+    return isFinite(n) ? n : (porDefecto || 0);
+  }
   function toast(texto) {
     var t = document.createElement("div");
     t.className = "toast"; t.textContent = texto; t.setAttribute("role","status");
     document.body.appendChild(t);
-    setTimeout(function () { t.remove(); }, 3200);
+    setTimeout(function () { t.remove(); }, 3600);
   }
   function hoyISO() { return new Date().toISOString().slice(0, 10); }
   function fechaCorta(iso) {
     if (!iso) return "";
     var p = String(iso).slice(0, 10).split("-");
     return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
+  }
+  function limpio(t) { return String(t === null || t === undefined ? "" : t).trim(); }
+
+  function nuevoNumero() {
+    var d = new Date();
+    var dd = String(d.getDate()).padStart(2, "0");
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var yy = String(d.getFullYear()).slice(2);
+    return "BYC-" + yy + mm + dd + "-" + String(Math.floor(Math.random() * 90) + 10);
+  }
+
+  function itemNuevo(base) {
+    seq += 1;
+    var i = {
+      id: "l" + seq, producto: "", cantidad: 20, tamano: "M",
+      pintado: 50, tintas: 2, relieve: false,
+      // Vacío = usar el parámetro general. Se llenan solo cuando esta
+      // referencia se sale de lo normal (un plato lleva más que un pocillo).
+      bizcocho: "", onzas: "", vinilo: "", empaque: "",
+      minutos_extra: "", descuento: "", notas: ""
+    };
+    if (base) {
+      Object.keys(i).forEach(function (k) { if (k !== "id" && k in base) i[k] = base[k]; });
+    }
+    return i;
+  }
+
+  function cotizacionNueva() {
+    return {
+      numero: nuevoNumero(), cliente: "", contacto: "", notas: "",
+      items: [itemNuevo()],
+      cond: { descuento:0, urgencia:0, envio:0, desarrollo:0, iva:true,
+              anticipo:50, validez:15, plazo:"4-6 semanas hábiles" }
+    };
   }
 
   // ───────────────────────────────────────────────────────────────────
@@ -350,18 +532,27 @@
     return p <= 1 ? "facil" : (p <= 3 ? "medio" : "dificil");
   }
 
-  function calcular(e) {
-    var P = PARAMS, avisos = [], dificultad = gradoAcabado(e.pintado, e.tintas, e.relieve);
+  // Un ajuste de la referencia manda sobre el parámetro general; vacío = el general.
+  function conAjuste(valorItem, valorGeneral) {
+    return limpio(valorItem) === "" ? Number(valorGeneral) || 0 : numero(valorItem, 0);
+  }
 
-    // Tiempo: se suman las etapas que tengan el dato de ese tamaño
-    var minAcabado = (TIEMPOS["Acabado"][e.tamano] || {})[dificultad];
+  function calcularLinea(it) {
+    var P = PARAMS, avisos = [];
+    var cantidad = Math.max(1, Math.round(numero(it.cantidad, 1)));
+    var dificultad = gradoAcabado(numero(it.pintado, 0), numero(it.tintas, 0), !!it.relieve);
+
+    var minAcabado = (TIEMPOS["Acabado"][it.tamano] || {})[dificultad];
     if (minAcabado == null) {
-      return { error: "Todavía no está medido el acabado de una pieza " + e.tamano +
-                      " con dificultad " + dificultad + ". Ese tiempo hay que cronometrarlo en el taller." };
+      return { id:it.id, dificultad:dificultad,
+               error: "Falta medir el acabado de una pieza " + it.tamano + " con dificultad " +
+                      NOMBRE_DIF[dificultad] + ". Ese tiempo hay que cronometrarlo en el taller " +
+                      "y cargarlo en Ajustes." };
     }
+
     var porEtapa = { "Acabado": minAcabado }, sinMedir = [];
     ["Preparación del bizcocho", "Terminado y empaque"].forEach(function (etapa) {
-      var v = (TIEMPOS[etapa][e.tamano] || {})[dificultad];
+      var v = (TIEMPOS[etapa][it.tamano] || {})[dificultad];
       if (v == null) sinMedir.push(etapa.toLowerCase()); else porEtapa[etapa] = v;
     });
     if (sinMedir.length && Number(P.minutos_otros_pasos) > 0) {
@@ -369,32 +560,37 @@
       sinMedir = [];
     }
     if (sinMedir.length) {
-      avisos.push({ texto: "Sin medir: " + sinMedir.join(" y ") + ". Solo se está cobrando el acabado, " +
-                           "así que el tiempo real por pieza es mayor." });
+      avisos.push({ texto:"Sin medir: " + sinMedir.join(" y ") + ". Solo se está cobrando el " +
+                          "acabado, así que el tiempo real por pieza es mayor." });
     }
+    var extra = numero(it.minutos_extra, 0);
+    if (extra) porEtapa["Ajuste manual"] = extra;
     var minutos = Object.keys(porEtapa).reduce(function (s, k) { return s + porEtapa[k]; }, 0);
+    if (minutos < 0) minutos = 0;
 
     // Mano de obra
     var horasMes = Number(P.horas_semanales) * Number(P.semanas_mes);
     var valorHora = horasMes ? Number(P.salario_mensual) / horasMes : 0;
     var manoObra = (minutos / 60) * valorHora;
 
-    // Materiales: el esmalte se carga en onzas cuando están puestas
-    var onzas = Number(P.oz_esmalte_por_pieza) || 0;
+    // Materiales — cada referencia puede traer los suyos
+    var bizcocho = conAjuste(it.bizcocho, P.costo_bizcocho);
+    var onzas = conAjuste(it.onzas, P.oz_esmalte_por_pieza);
     var esmaltes = onzas ? onzas * Number(P.precio_oz_esmalte) : Number(P.costo_esmaltes) || 0;
-    var materiales = (Number(P.costo_bizcocho) || 0) + esmaltes + (Number(P.costo_vinilo) || 0);
+    var vinilo = conAjuste(it.vinilo, P.costo_vinilo);
+    var empaque = conAjuste(it.empaque, P.costo_empaque);
+    var materiales = bizcocho + esmaltes + vinilo;
 
     var faltan = [];
-    if (!Number(P.costo_bizcocho)) faltan.push("bizcocho");
+    if (!bizcocho) faltan.push("bizcocho");
     if (!esmaltes) faltan.push("esmaltes");
-    if (!Number(P.costo_empaque)) faltan.push("empaque");
+    if (!empaque) faltan.push("empaque");
     if (faltan.length) {
       avisos.push({ duro:true, texto:"Sin costo cargado: " + faltan.join(", ") +
                     ". El precio sale por debajo del real." });
     }
 
     var quema = Number(P.costo_quema) || 0;          // va en 0: su energía está en servicios
-    var empaque = Number(P.costo_empaque) || 0;
     var directo = materiales + manoObra + quema + empaque;
     var desperdicio = directo * Number(P.desperdicio_pct) / 100;
     var directoTotal = directo + desperdicio;
@@ -407,99 +603,308 @@
     var admin = Number(P.gastos_admin_mes) / volumen;
     var granTotal = directoTotal + mercadeo + arriendo + admin;
 
-    if (e.cantidad < volumen * 0.2) {
-      avisos.push({ texto:"El pedido (" + e.cantidad + " piezas) es chico frente a las " + volumen +
-                    " piezas al mes entre las que se reparten los fijos. Este precio solo se sostiene " +
-                    "si el mes se llena con otros pedidos." });
-    }
-
     var margen = Number(P.margen_pct) / 100;
     var pvp = String(P.margen_modo).toLowerCase() === "sobre_venta"
       ? granTotal / (1 - margen) : granTotal * (1 + margen);
-    var iva = pvp * Number(P.iva_pct) / 100;
+
+    var descPct = Math.max(0, Math.min(100, numero(it.descuento, 0)));
+    var bruto = pvp * cantidad;
+    var descuento = bruto * descPct / 100;
 
     return {
-      producto:e.producto, cliente:e.cliente, cantidad:e.cantidad,
-      tamano:e.tamano, dificultad:dificultad,
-      minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa, valorHora:valorHora,
-      lineas: [
+      id:it.id, producto:limpio(it.producto), cantidad:cantidad, tamano:it.tamano,
+      dificultad:dificultad, minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa,
+      valorHora:valorHora, notas:limpio(it.notas),
+      costos: [
         ["Materiales", materiales], ["Mano de obra", manoObra],
-        ["Quema del esmalte", quema], ["Empaque", empaque],
-        ["Desperdicio", desperdicio], ["Mercadeo", mercadeo],
+        ["Empaque", empaque], ["Desperdicio", desperdicio], ["Mercadeo", mercadeo],
         ["Arriendo y servicios", arriendo], ["Administración", admin]
       ],
-      granTotal:granTotal, margen:pvp - granTotal, pvp:pvp, iva:iva,
-      conIva:pvp + iva, totalPedido:pvp * e.cantidad, totalPedidoIva:(pvp + iva) * e.cantidad,
-      volumen:volumen, avisos:avisos
+      granTotal:granTotal, margen:pvp - granTotal, pvp:pvp,
+      descuentoPct:descPct, bruto:bruto, descuento:descuento, total:bruto - descuento,
+      avisos:avisos
     };
   }
 
-  // ── Render del cotizador ──────────────────────────────────────────
-  function pintarTamanos() {
-    var cont = $("f-tamano");
+  function calcularPedido() {
+    var c = cot, piezas = 0, avisos = [];
+    c.items.forEach(function (it) { piezas += Math.max(1, Math.round(numero(it.cantidad, 1))); });
+
+    var lineas = c.items.map(calcularLinea);
+    var buenas = lineas.filter(function (l) { return !l.error; });
+
+    lineas.forEach(function (l) {
+      if (l.error) { avisos.push({ duro:true, texto:l.error }); return; }
+      l.avisos.forEach(function (a) {
+        if (!avisos.some(function (x) { return x.texto === a.texto; })) avisos.push(a);
+      });
+    });
+    // "Sin medir" se repite por tamaño y dificultad: en un pedido de 10 referencias
+    // serían 10 avisos diciendo lo mismo.
+    var repetidos = avisos.filter(function (a) { return a.texto.indexOf("Sin medir:") === 0; });
+    if (repetidos.length > 1) {
+      avisos = avisos.filter(function (a) { return a.texto.indexOf("Sin medir:") !== 0; });
+      avisos.unshift({ texto:"Sin medir: preparación del bizcocho y terminado y empaque, en " +
+                             "varias referencias. Solo se está cobrando el acabado, así que el " +
+                             "tiempo real por pieza es mayor." });
+    }
+
+    var volumen = Number(PARAMS.volumen_referencia) || 1;
+    if (buenas.length && piezas < volumen * 0.2) {
+      avisos.push({ texto:"El pedido (" + piezas + " piezas) es chico frente a las " + volumen +
+                    " piezas al mes entre las que se reparten los fijos. Este precio solo se " +
+                    "sostiene si el mes se llena con otros pedidos." });
+    }
+
+    var subtotal = buenas.reduce(function (s, l) { return s + l.total; }, 0);
+    var urgencia = subtotal * numero(c.cond.urgencia, 0) / 100;
+    var descuento = (subtotal + urgencia) * numero(c.cond.descuento, 0) / 100;
+    var envio = numero(c.cond.envio, 0);
+    var desarrollo = numero(c.cond.desarrollo, 0);
+    var base = subtotal + urgencia - descuento + envio + desarrollo;
+    var iva = c.cond.iva ? base * Number(PARAMS.iva_pct) / 100 : 0;
+    var total = base + iva;
+
+    return {
+      numero:limpio(c.numero) || nuevoNumero(), cliente:limpio(c.cliente),
+      contacto:limpio(c.contacto), notas:limpio(c.notas), cond:c.cond,
+      lineas:lineas, buenas:buenas, piezas:piezas,
+      subtotal:subtotal, urgencia:urgencia, descuento:descuento, envio:envio,
+      desarrollo:desarrollo, base:base, iva:iva, total:total,
+      anticipo: total * numero(c.cond.anticipo, 0) / 100,
+      avisos:avisos
+    };
+  }
+
+  // ── Render: una tarjeta por referencia ────────────────────────────
+  function pintarItems() {
+    var cont = $("lista-items");
     cont.innerHTML = "";
+    cot.items.forEach(function (it, i) { cont.appendChild(tarjetaItem(it, i)); });
+    $("conteo").textContent = cot.items.length + " de " + MAX_ITEMS + " referencias";
+    $("b-agregar").disabled = cot.items.length >= MAX_ITEMS;
+    recalcular();
+  }
+
+  function campo(etiqueta, hijo, ayuda) {
+    var l = document.createElement("label");
+    l.className = "campo";
+    var s = document.createElement("span"); s.textContent = etiqueta;
+    l.appendChild(s); l.appendChild(hijo);
+    if (ayuda) { var a = document.createElement("small"); a.textContent = ayuda; l.appendChild(a); }
+    if (hijo.id) l.setAttribute("for", hijo.id);
+    return l;
+  }
+
+  function entrada(tipo, valor, attrs) {
+    var e = document.createElement("input");
+    e.type = tipo;
+    e.value = valor === null || valor === undefined ? "" : valor;
+    if (tipo === "number") e.className = "num";
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    return e;
+  }
+
+  function tarjetaItem(it, indice) {
+    var card = document.createElement("article");
+    card.className = "item";
+    it._card = card;
+
+    // ── Fila de arriba: nombre, cantidad, precio, herramientas
+    var top = document.createElement("div"); top.className = "i-top";
+    var n = document.createElement("div"); n.className = "i-n num"; n.textContent = indice + 1;
+    top.appendChild(n);
+
+    var prod = entrada("text", it.producto, { placeholder:"Taza cónica 250 ml", autocomplete:"off",
+                                              id:"p-" + it.id });
+    var lProd = campo("Producto", prod);
+    lProd.className = "campo i-prod"; lProd.style.marginBottom = "0";
+    top.appendChild(lProd);
+
+    var cant = entrada("number", it.cantidad, { min:"1", step:"1", id:"q-" + it.id });
+    var lCant = campo("Cantidad", cant);
+    lCant.className = "campo i-cant"; lCant.style.marginBottom = "0";
+    top.appendChild(lCant);
+
+    var precio = document.createElement("div"); precio.className = "i-precio";
+    var pb = document.createElement("b"); pb.className = "num";
+    var ps = document.createElement("small");
+    precio.appendChild(pb); precio.appendChild(ps);
+    it._precio = pb; it._precioNota = ps;
+    top.appendChild(precio);
+
+    var herr = document.createElement("div"); herr.className = "i-herr";
+    var dup = document.createElement("button");
+    dup.type = "button"; dup.className = "icono"; dup.textContent = "⧉";
+    dup.title = "Duplicar esta referencia"; dup.setAttribute("aria-label", "Duplicar referencia");
+    dup.addEventListener("click", function () {
+      if (cot.items.length >= MAX_ITEMS) { toast("Máximo " + MAX_ITEMS + " referencias"); return; }
+      cot.items.splice(cot.items.indexOf(it) + 1, 0, itemNuevo(it));
+      pintarItems(); guardarBorrador();
+    });
+    var quitar = document.createElement("button");
+    quitar.type = "button"; quitar.className = "icono"; quitar.textContent = "✕";
+    quitar.title = "Quitar esta referencia"; quitar.setAttribute("aria-label", "Quitar referencia");
+    quitar.addEventListener("click", function () {
+      if (cot.items.length === 1) { toast("La cotización necesita al menos una referencia"); return; }
+      cot.items.splice(cot.items.indexOf(it), 1); pintarItems(); guardarBorrador();
+    });
+    herr.appendChild(dup); herr.appendChild(quitar);
+    top.appendChild(herr);
+    card.appendChild(top);
+
+    // ── Tamaño y dificultad
+    var fila = document.createElement("div"); fila.className = "i-linea";
+    var seg = document.createElement("div"); seg.className = "segmented";
+    seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Tamaño");
     TAMANOS.forEach(function (t) {
       var b = document.createElement("button");
       b.type = "button"; b.className = "seg";
-      b.setAttribute("aria-pressed", String(entrada.tamano === t.id));
-      b.innerHTML = t.id + "<small>" + t.nota + "</small>";
+      b.setAttribute("aria-pressed", String(it.tamano === t.id));
+      var chico = document.createElement("small"); chico.textContent = t.nota;
+      b.appendChild(document.createTextNode(t.id)); b.appendChild(chico);
       b.addEventListener("click", function () {
-        entrada.tamano = t.id; pintarTamanos(); refrescar();
+        it.tamano = t.id;
+        Array.prototype.forEach.call(seg.children, function (otro, i) {
+          otro.setAttribute("aria-pressed", String(TAMANOS[i].id === t.id));
+        });
+        recalcular(); guardarBorrador();
       });
-      cont.appendChild(b);
+      seg.appendChild(b);
     });
+    fila.appendChild(seg);
+    var grado = document.createElement("div"); grado.className = "grado";
+    it._grado = grado; fila.appendChild(grado);
+    card.appendChild(fila);
+
+    // ── Decoración
+    var deco = document.createElement("div"); deco.className = "i-deco";
+    var rango = entrada("range", it.pintado, { min:"0", max:"100", step:"5", id:"s-" + it.id });
+    var lRango = campo("Superficie pintada", rango);
+    it._pintadoVal = document.createElement("b");
+    it._pintadoVal.className = "num";
+    var spanRango = lRango.querySelector("span");
+    spanRango.appendChild(document.createTextNode(" — "));
+    spanRango.appendChild(it._pintadoVal);
+    deco.appendChild(lRango);
+
+    var dos = document.createElement("div"); dos.className = "fila";
+    dos.style.alignItems = "center";
+    var tintas = entrada("number", it.tintas, { min:"0", max:"12", step:"1", id:"t-" + it.id });
+    dos.appendChild(campo("Tintas", tintas));
+    var lRel = document.createElement("label");
+    lRel.className = "check"; lRel.setAttribute("for", "r-" + it.id);
+    lRel.style.marginBottom = "0"; lRel.style.flex = "1 1 130px";
+    var rel = entrada("checkbox", "", { id:"r-" + it.id }); rel.checked = !!it.relieve;
+    var sRel = document.createElement("span"); sRel.textContent = "Solo relieve";
+    lRel.appendChild(rel); lRel.appendChild(sRel);
+    dos.appendChild(lRel);
+    deco.appendChild(dos);
+    card.appendChild(deco);
+
+    // ── Detalle avanzado de la referencia
+    var det = document.createElement("details"); det.className = "mas";
+    var sum = document.createElement("summary");
+    sum.appendChild(document.createTextNode("Materiales, tiempo y descuento de esta referencia"));
+    det.appendChild(sum);
+    var cuerpo = document.createElement("div"); cuerpo.className = "mas-cuerpo";
+    var rej = document.createElement("div"); rej.className = "rejilla";
+
+    var bizcocho = entrada("number", it.bizcocho, { min:"0", step:"100", id:"b-" + it.id });
+    var onzas    = entrada("number", it.onzas,    { min:"0", step:"0.25", id:"o-" + it.id });
+    var vinilo   = entrada("number", it.vinilo,   { min:"0", step:"100", id:"v-" + it.id });
+    var empaque  = entrada("number", it.empaque,  { min:"0", step:"100", id:"e-" + it.id });
+    var minExtra = entrada("number", it.minutos_extra, { min:"-60", step:"1", id:"m-" + it.id });
+    var descItem = entrada("number", it.descuento, { min:"0", max:"60", step:"1", id:"d-" + it.id });
+    it._placeholders = { bizcocho:bizcocho, onzas:onzas, vinilo:vinilo, empaque:empaque };
+
+    rej.appendChild(campo("Bizcocho $", bizcocho, "Por pieza"));
+    rej.appendChild(campo("Esmalte (oz)", onzas, "Onzas por pieza"));
+    rej.appendChild(campo("Vinilo $", vinilo, "0 si no lleva"));
+    rej.appendChild(campo("Empaque $", empaque, "Por pieza"));
+    rej.appendChild(campo("Minutos extra", minExtra, "Trabajo que no cubre el estándar"));
+    rej.appendChild(campo("Descuento %", descItem, "Solo de esta referencia"));
+    cuerpo.appendChild(rej);
+
+    var notas = entrada("text", it.notas, { placeholder:"Borde esmaltado a mano, empaque de regalo…",
+                                            autocomplete:"off", id:"nt-" + it.id });
+    var lNotas = campo("Nota (sale en el PDF)", notas);
+    lNotas.style.marginTop = "12px"; lNotas.style.marginBottom = "0";
+    cuerpo.appendChild(lNotas);
+
+    var mini = document.createElement("ul"); mini.className = "mini";
+    it._mini = mini; cuerpo.appendChild(mini);
+    det.appendChild(cuerpo);
+    card.appendChild(det);
+
+    // ── Conexión con el estado
+    var mapa = [[prod,"producto"], [cant,"cantidad"], [rango,"pintado"], [tintas,"tintas"],
+                [bizcocho,"bizcocho"], [onzas,"onzas"], [vinilo,"vinilo"], [empaque,"empaque"],
+                [minExtra,"minutos_extra"], [descItem,"descuento"], [notas,"notas"]];
+    mapa.forEach(function (par) {
+      function leer() { it[par[1]] = par[0].value; recalcular(); guardarBorrador(); }
+      par[0].addEventListener("input", leer);
+      par[0].addEventListener("change", leer);
+    });
+    rel.addEventListener("change", function () {
+      it.relieve = rel.checked; recalcular(); guardarBorrador();
+    });
+
+    return card;
   }
 
-  function refrescar() {
-    entrada.producto = $("f-producto").value.trim();
-    entrada.cliente = $("f-cliente").value.trim();
-    entrada.cantidad = Math.max(1, parseInt($("f-cantidad").value, 10) || 1);
-    entrada.pintado = parseInt($("f-pintado").value, 10);
-    entrada.tintas = Math.max(0, parseInt($("f-tintas").value, 10) || 0);
-    entrada.relieve = $("f-relieve").checked;
-
-    $("f-pintado-val").textContent = entrada.pintado + "%";
-    var g = gradoAcabado(entrada.pintado, entrada.tintas, entrada.relieve);
-    $("f-grado").textContent = "Acabado " + (g === "facil" ? "fácil" : g === "medio" ? "medio" : "difícil");
-
-    var r = calcular(entrada);
-    var avisos = $("r-avisos"), desglose = $("r-desglose");
-    avisos.innerHTML = ""; desglose.innerHTML = "";
-
-    if (r.error) {
-      ultimo = null;
-      $("r-precio").textContent = "—";
-      $("r-nota").textContent = "";
-      $("r-contexto").innerHTML = "&nbsp;";
-      avisos.appendChild(aviso({ duro:true, texto:r.error }));
-      $("b-pdf").disabled = true; $("b-guardar").disabled = true;
-      return;
-    }
-
+  // ── Render: números ───────────────────────────────────────────────
+  function recalcular() {
+    if (!cot) return;
+    var r = calcularPedido();
     ultimo = r;
-    $("b-pdf").disabled = false;
-    $("b-guardar").disabled = puedeEscribir === false;
 
-    $("r-contexto").textContent = (r.producto || "Pieza") + " · " + r.tamano + " · " +
-      r.minutos + " min por pieza";
-    $("r-precio").textContent = pesos(r.pvp);
-    $("r-nota").textContent = "por pieza, sin IVA · " + pesos(r.conIva) + " con IVA · pedido de " +
-      r.cantidad + ": " + pesos(r.totalPedido);
+    cot.items.forEach(function (it) {
+      if (!it._card) return;
+      var l = r.lineas.filter(function (x) { return x.id === it.id; })[0];
+      if (!l) return;
+      it._pintadoVal.textContent = Math.round(numero(it.pintado, 0)) + "%";
+      it._grado.textContent = "Acabado " + NOMBRE_DIF[l.dificultad];
+      var ph = it._placeholders;
+      ph.bizcocho.placeholder = String(Math.round(Number(PARAMS.costo_bizcocho) || 0));
+      ph.onzas.placeholder = String(Number(PARAMS.oz_esmalte_por_pieza) || 0);
+      ph.vinilo.placeholder = String(Math.round(Number(PARAMS.costo_vinilo) || 0));
+      ph.empaque.placeholder = String(Math.round(Number(PARAMS.costo_empaque) || 0));
 
-    r.lineas.forEach(function (l) {
-      if (!l[1]) return;
-      desglose.appendChild(linea(l[0], pesos(l[1])));
+      if (l.error) {
+        it._card.classList.add("mal");
+        it._precio.textContent = "—";
+        it._precioNota.textContent = "sin tiempo medido";
+        it._mini.textContent = "";
+        return;
+      }
+      it._card.classList.remove("mal");
+      it._precio.textContent = pesos(l.total);
+      it._precioNota.textContent = pesos(l.pvp) + " c/u · " + l.minutos + " min" +
+                                   (l.descuentoPct ? " · -" + l.descuentoPct + "%" : "");
+      it._mini.textContent = "";
+      l.costos.forEach(function (c) {
+        if (c[1]) it._mini.appendChild(miniLinea(c[0], pesos(c[1])));
+      });
+      it._mini.appendChild(miniLinea("Costo + gastos", pesos(l.granTotal)));
+      it._mini.appendChild(miniLinea("Margen", pesos(l.margen)));
+      it._mini.appendChild(miniLinea("PVP por pieza", pesos(l.pvp)));
     });
-    desglose.appendChild(linea("Costo + gastos", pesos(r.granTotal)));
-    desglose.appendChild(linea("Margen", pesos(r.margen)));
-    var t = linea("PVP por pieza", pesos(r.pvp)); t.className = "total";
-    desglose.appendChild(t);
 
-    r.avisos.forEach(function (a) { avisos.appendChild(aviso(a)); });
+    pintarResumen(r);
   }
 
-  function linea(etiqueta, valor) {
+  function miniLinea(etiqueta, valor) {
     var li = document.createElement("li");
+    var a = document.createElement("span"); a.textContent = etiqueta;
+    var b = document.createElement("b"); b.className = "num"; b.textContent = valor;
+    li.appendChild(a); li.appendChild(b);
+    return li;
+  }
+
+  function linea(etiqueta, valor, clase) {
+    var li = document.createElement("li");
+    if (clase) li.className = clase;
     var a = document.createElement("span"); a.textContent = etiqueta;
     var b = document.createElement("span"); b.className = "num"; b.textContent = valor;
     li.appendChild(a); li.appendChild(b);
@@ -513,16 +918,79 @@
     return d;
   }
 
+  function pintarResumen(r) {
+    var desglose = $("r-desglose"), avisos = $("r-avisos");
+    desglose.textContent = ""; avisos.textContent = "";
+
+    var hay = r.buenas.length > 0;
+    $("b-pdf").disabled = !hay;
+    $("b-guardar").disabled = !hay || puedeEscribir === false;
+
+    $("r-contexto").textContent = r.numero + " · " + r.buenas.length +
+      (r.buenas.length === 1 ? " referencia · " : " referencias · ") + r.piezas + " piezas";
+    $("r-precio").textContent = hay ? pesos(r.total) : "—";
+    $("r-nota").textContent = hay
+      ? (r.cond.iva ? "con IVA · " : "sin IVA · ") + pesos(r.base) + " antes de IVA"
+      : "Falta completar al menos una referencia";
+
+    r.buenas.forEach(function (l, i) {
+      desglose.appendChild(linea((l.producto || "Referencia " + (i + 1)) + " × " + l.cantidad,
+                                 pesos(l.total), "ref"));
+    });
+    if (hay) desglose.appendChild(linea("Subtotal", pesos(r.subtotal), "suave"));
+    if (r.urgencia) desglose.appendChild(linea("Urgencia (" + r.cond.urgencia + "%)", pesos(r.urgencia), "suave"));
+    if (r.descuento) desglose.appendChild(linea("Descuento (" + r.cond.descuento + "%)", "-" + pesos(r.descuento), "suave"));
+    if (r.envio) desglose.appendChild(linea("Envío", pesos(r.envio), "suave"));
+    if (r.desarrollo) desglose.appendChild(linea("Molde o desarrollo", pesos(r.desarrollo), "suave"));
+    if (r.iva) desglose.appendChild(linea("IVA (" + PARAMS.iva_pct + "%)", pesos(r.iva), "suave"));
+    if (hay) {
+      desglose.appendChild(linea("Total", pesos(r.total), "total"));
+      if (r.anticipo) desglose.appendChild(linea("Anticipo " + r.cond.anticipo + "%", pesos(r.anticipo), "suave"));
+    }
+
+    r.avisos.forEach(function (a) { avisos.appendChild(aviso(a)); });
+  }
+
   // ── PDF ───────────────────────────────────────────────────────────
+  var ROSA = [192, 112, 130], TINTA = [46, 33, 31], GRIS = [138, 116, 112], BORDE = [232, 220, 216];
+
   function generarPDF(r) {
     var jsPDF = (window.jspdf || {}).jsPDF;
     if (!jsPDF) { toast("No se pudo cargar el generador de PDF"); return null; }
     var doc = new jsPDF({ unit:"pt", format:"a4" });
-    var W = doc.internal.pageSize.getWidth(), M = 42, x2 = W - M;
-    var numero = "BYC-" + String(Date.now()).slice(-6);
+    var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+    var M = 42, x2 = W - M;
+    var colCant = M + 300, colUnit = M + 400;
+    var y = 0;
 
-    // Cabecera
-    doc.setFillColor(192, 112, 130); doc.rect(0, 0, W, 96, "F");
+    function pie() {
+      var yp = H - 52;
+      doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]); doc.line(M, yp - 16, x2, yp - 16);
+      doc.setFont("times", "italic"); doc.setFontSize(10); doc.setTextColor(ROSA[0], ROSA[1], ROSA[2]);
+      doc.text("Cada pieza es única, hecha a mano con amor.", W / 2, yp, { align:"center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+      doc.text("Precios en pesos colombianos (COP) · hola@bosqueycielo.com · 310 492 5416",
+               W / 2, yp + 14, { align:"center" });
+    }
+
+    function nuevaPagina() {
+      pie(); doc.addPage(); y = 78;
+      doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.text("Cotización " + r.numero + (r.cliente ? " · " + r.cliente : ""), M, y - 20);
+    }
+
+    function encabezadoTabla() {
+      doc.setFillColor(ROSA[0], ROSA[1], ROSA[2]); doc.rect(M, y, x2 - M, 22, "F");
+      doc.setTextColor(255); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+      doc.text("PRODUCTO", M + 10, y + 14);
+      doc.text("CANT.", colCant, y + 14, { align:"right" });
+      doc.text("P. UNITARIO", colUnit, y + 14, { align:"right" });
+      doc.text("TOTAL", x2 - 10, y + 14, { align:"right" });
+      y += 22;
+    }
+
+    // ── Cabecera (solo en la primera página)
+    doc.setFillColor(ROSA[0], ROSA[1], ROSA[2]); doc.rect(0, 0, W, 96, "F");
     doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(24);
     doc.text("Bosque y Cielo", M, 46);
     doc.setFont("helvetica", "normal"); doc.setFontSize(8);
@@ -533,77 +1001,216 @@
       doc.text(t, x2, 36 + i * 13, { align:"right" });
     });
 
-    // Barra de título
     doc.setFillColor(240, 232, 229); doc.rect(0, 96, W, 52, "F");
-    doc.setTextColor(46, 33, 31); doc.setFont("times", "normal"); doc.setFontSize(19);
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFont("times", "normal"); doc.setFontSize(19);
     doc.text("Cotización", M, 128);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(138, 116, 112);
-    doc.text("N° COTIZACIÓN", x2 - 110, 118); doc.text("FECHA", x2, 118, { align:"right" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+    doc.text("N° COTIZACIÓN", x2 - 145, 118); doc.text("FECHA", x2, 118, { align:"right" });
     doc.setFontSize(10); doc.setTextColor(154, 78, 96);
-    doc.text(numero, x2 - 110, 132);
+    doc.text(r.numero, x2 - 145, 132);
     doc.text(fechaCorta(hoyISO()), x2, 132, { align:"right" });
 
-    var y = 184;
-    doc.setTextColor(46, 33, 31); doc.setFont("times", "normal"); doc.setFontSize(12);
+    y = 180;
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFont("times", "normal"); doc.setFontSize(12);
     doc.text(r.cliente ? "Para " + r.cliente : "Cotización interna", M, y);
+    if (r.contacto) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+      doc.text(r.contacto, M, y + 14);
+      y += 14;
+    }
     y += 22;
+    encabezadoTabla();
 
-    // Tabla
-    doc.setFillColor(192, 112, 130); doc.rect(M, y, x2 - M, 22, "F");
-    doc.setTextColor(255); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-    doc.text("PRODUCTO", M + 10, y + 14);
-    doc.text("CANT.", M + 300, y + 14, { align:"right" });
-    doc.text("P. UNITARIO", M + 390, y + 14, { align:"right" });
-    doc.text("TOTAL", x2 - 10, y + 14, { align:"right" });
-    y += 22;
+    // ── Una fila por referencia, con salto de página cuando toca
+    r.buenas.forEach(function (l, i) {
+      var alto = l.notas ? 48 : 36;
+      if (y + alto > H - 96) { nuevaPagina(); encabezadoTabla(); }
+      if (i % 2 === 1) {
+        doc.setFillColor(250, 246, 244); doc.rect(M, y, x2 - M, alto, "F");
+      }
+      doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      doc.text(doc.splitTextToSize(l.producto || "Pieza en cerámica", 250)[0], M + 10, y + 16);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+      var detalle = "Tamaño " + l.tamano + " · acabado " + NOMBRE_DIF[l.dificultad];
+      if (l.descuentoPct) detalle += " · descuento " + l.descuentoPct + "%";
+      doc.text(detalle, M + 10, y + 28);
+      if (l.notas) doc.text(doc.splitTextToSize(l.notas, 250)[0], M + 10, y + 40);
 
-    doc.setTextColor(46, 33, 31); doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text(r.producto || "Pieza en cerámica", M + 10, y + 20);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(138, 116, 112);
-    doc.text("Tamaño " + r.tamano + " · acabado " + r.dificultad, M + 10, y + 33);
-    doc.setFontSize(10); doc.setTextColor(46, 33, 31);
-    doc.text(String(r.cantidad), M + 300, y + 20, { align:"right" });
-    doc.text(pesos(r.pvp), M + 390, y + 20, { align:"right" });
-    doc.setFont("helvetica", "bold");
-    doc.text(pesos(r.totalPedido), x2 - 10, y + 20, { align:"right" });
-    y += 46;
-    doc.setDrawColor(232, 220, 216); doc.line(M, y, x2, y);
-    y += 16;
+      doc.setFontSize(10); doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+      doc.text(String(l.cantidad), colCant, y + 16, { align:"right" });
+      doc.text(pesos(l.pvp), colUnit, y + 16, { align:"right" });
+      doc.setFont("helvetica", "bold");
+      doc.text(pesos(l.total), x2 - 10, y + 16, { align:"right" });
+      y += alto;
+      doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]); doc.line(M, y, x2, y);
+    });
 
-    // Totales
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(138, 116, 112);
-    doc.text("IVA (19%)", M + 390, y, { align:"right" });
-    doc.setTextColor(46, 33, 31);
-    doc.text(pesos(r.iva * r.cantidad), x2 - 10, y, { align:"right" });
-    y += 22;
+    // ── Totales
+    var filas = 1 + (r.urgencia ? 1 : 0) + (r.descuento ? 1 : 0) + (r.envio ? 1 : 0) +
+                (r.desarrollo ? 1 : 0) + (r.iva ? 1 : 0);
+    if (y + filas * 18 + 150 > H - 80) { nuevaPagina(); } else { y += 20; }
 
-    doc.setFillColor(192, 112, 130); doc.rect(M, y, x2 - M, 34, "F");
+    function total(etiqueta, valor) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+      doc.text(etiqueta, colUnit, y, { align:"right" });
+      doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+      doc.text(valor, x2 - 10, y, { align:"right" });
+      y += 18;
+    }
+    total("Subtotal", pesos(r.subtotal));
+    if (r.urgencia) total("Urgencia (" + r.cond.urgencia + "%)", pesos(r.urgencia));
+    if (r.descuento) total("Descuento (" + r.cond.descuento + "%)", "-" + pesos(r.descuento));
+    if (r.envio) total("Envío", pesos(r.envio));
+    if (r.desarrollo) total("Molde o desarrollo", pesos(r.desarrollo));
+    if (r.iva) total("IVA (" + PARAMS.iva_pct + "%)", pesos(r.iva));
+
+    y += 4;
+    doc.setFillColor(ROSA[0], ROSA[1], ROSA[2]); doc.rect(M, y, x2 - M, 34, "F");
     doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(14);
     doc.text("TOTAL", M + 10, y + 22);
-    doc.text(pesos(r.totalPedidoIva), x2 - 10, y + 22, { align:"right" });
-    y += 58;
+    doc.text(pesos(r.total), x2 - 10, y + 22, { align:"right" });
+    y += 64;
 
-    // Condiciones
-    doc.setTextColor(138, 116, 112); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    // ── Condiciones
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
     doc.text("CONDICIONES DE PAGO", M, y);
-    doc.setTextColor(46, 33, 31); doc.setFontSize(10);
-    doc.text("50% anticipo · 50% contra entrega", M, y + 14);
-    doc.setTextColor(138, 116, 112); doc.setFontSize(8);
-    doc.text("PLAZO DE ENTREGA", M + 280, y);
-    doc.setTextColor(46, 33, 31); doc.setFontSize(10);
-    doc.text("4-6 semanas hábiles", M + 280, y + 14);
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFontSize(10);
+    doc.text(Math.round(numero(r.cond.anticipo, 0)) + "% anticipo · " +
+             (100 - Math.round(numero(r.cond.anticipo, 0))) + "% contra entrega", M, y + 14);
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(8);
+    doc.text("PLAZO DE ENTREGA", M + 200, y);
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFontSize(10);
+    doc.text(String(r.cond.plazo || "Por confirmar"), M + 200, y + 14);
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(8);
+    doc.text("VALIDEZ", M + 390, y);
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFontSize(10);
+    doc.text(Math.round(numero(r.cond.validez, 0)) + " días", M + 390, y + 14);
+    y += 42;
 
-    // Pie
-    var yPie = doc.internal.pageSize.getHeight() - 56;
-    doc.setDrawColor(232, 220, 216); doc.line(M, yPie - 16, x2, yPie - 16);
-    doc.setFont("times", "italic"); doc.setFontSize(10); doc.setTextColor(192, 112, 130);
-    doc.text("Cada pieza es única, hecha a mano con amor.", W / 2, yPie, { align:"center" });
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(138, 116, 112);
-    doc.text("Precios en pesos colombianos (COP) · hola@bosqueycielo.com · 310 492 5416",
-             W / 2, yPie + 14, { align:"center" });
+    if (r.notas) {
+      doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(8);
+      doc.text("NOTAS", M, y);
+      doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFontSize(9.5);
+      doc.splitTextToSize(r.notas, x2 - M).slice(0, 4).forEach(function (t, i) {
+        doc.text(t, M, y + 14 + i * 12);
+      });
+    }
 
-    return { doc:doc, numero:numero };
+    pie();
+    return { doc:doc, numero:r.numero };
+  }
+
+  // ── Borrador local (comodidad de quien está en esta pantalla) ──────
+  function guardarBorrador() {
+    try {
+      var copia = {
+        numero:cot.numero, cliente:cot.cliente, contacto:cot.contacto, notas:cot.notas,
+        cond:cot.cond,
+        items: cot.items.map(function (it) {
+          var plano = {};
+          Object.keys(it).forEach(function (k) { if (k.charAt(0) !== "_") plano[k] = it[k]; });
+          return plano;
+        })
+      };
+      localStorage.setItem("amphora-borrador", JSON.stringify(copia));
+    } catch (e) {}
+  }
+
+  function leerBorrador() {
+    try {
+      var crudo = localStorage.getItem("amphora-borrador");
+      if (!crudo) return null;
+      var d = JSON.parse(crudo);
+      if (!d || !d.items || !d.items.length) return null;
+      d.items = d.items.map(function (it) { return itemNuevo(it); });
+      d.cond = d.cond || cotizacionNueva().cond;
+      return d;
+    } catch (e) { return null; }
+  }
+
+  // ── Ajustes ───────────────────────────────────────────────────────
+  var refsParams = {}, refsTiempos = {};
+
+  function pintarAjustes() {
+    var rej = $("rejilla-params");
+    rej.textContent = ""; refsParams = {};
+    FICHA_PARAMS.forEach(function (f) {
+      var clave = f[0], etiqueta = f[1], unidad = f[2], ayuda = f[3];
+      var e = entrada("number", PARAMS[clave], { step:"any", min:"0", id:"ap-" + clave });
+      e.disabled = puedeEscribir === false;
+      refsParams[clave] = e;
+      rej.appendChild(campo(etiqueta + (unidad ? " (" + unidad + ")" : ""), e, ayuda));
+    });
+
+    var cont = $("grupos-tiempos");
+    cont.textContent = ""; refsTiempos = {};
+    Object.keys(TIEMPOS).forEach(function (etapa) {
+      var g = document.createElement("div"); g.className = "grupo-tiempos";
+      var h = document.createElement("h3"); h.textContent = etapa; g.appendChild(h);
+      var p = document.createElement("p"); p.textContent = PISTA_ETAPA[etapa] || ""; g.appendChild(p);
+
+      var tabla = document.createElement("table"); tabla.className = "tabla-tiempos";
+      var thead = document.createElement("thead");
+      var tr = document.createElement("tr");
+      ["Tamaño", "Fácil", "Medio", "Difícil"].forEach(function (t) {
+        var th = document.createElement("th"); th.textContent = t; tr.appendChild(th);
+      });
+      thead.appendChild(tr); tabla.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      TAMANOS.forEach(function (t) {
+        var fila = document.createElement("tr");
+        var td0 = document.createElement("td"); td0.textContent = t.id; fila.appendChild(td0);
+        DIFICULTADES.forEach(function (d) {
+          var td = document.createElement("td");
+          var valor = (TIEMPOS[etapa][t.id] || {})[d];
+          var e = entrada("number", valor === null || valor === undefined ? "" : valor,
+                          { min:"0", step:"0.5", placeholder:"—",
+                            "aria-label": etapa + " " + t.id + " " + d });
+          e.disabled = puedeEscribir === false;
+          refsTiempos[etapa + "|" + t.id + "|" + d] = e;
+          td.appendChild(e); fila.appendChild(td);
+        });
+        tbody.appendChild(fila);
+      });
+      tabla.appendChild(tbody); g.appendChild(tabla); cont.appendChild(g);
+    });
+
+    $("b-guardar-ajustes").disabled = puedeEscribir === false;
+    if (puedeEscribir === false) {
+      $("ajustes-lectura").innerHTML = '<div class="aviso-solo-lectura">Estás viendo los ajustes en ' +
+        'modo lectura: para cambiarlos necesitas permiso de edición en esta página.</div>';
+    }
+  }
+
+  function guardarAjustes() {
+    Object.keys(refsParams).forEach(function (clave) {
+      var v = refsParams[clave].value;
+      if (limpio(v) !== "") PARAMS[clave] = numero(v, PARAMS[clave]);
+    });
+    Object.keys(refsTiempos).forEach(function (llave) {
+      var partes = llave.split("|"), v = refsTiempos[llave].value;
+      if (!TIEMPOS[partes[0]][partes[1]]) TIEMPOS[partes[0]][partes[1]] = {};
+      if (limpio(v) === "") delete TIEMPOS[partes[0]][partes[1]][partes[2]];
+      else TIEMPOS[partes[0]][partes[1]][partes[2]] = numero(v, 0);
+    });
+    recalcular();
+
+    if (!db) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+    var copiaParams = {};
+    Object.keys(PARAMS).forEach(function (k) { copiaParams[k] = PARAMS[k]; });
+    Promise.all([
+      db.doc("config/parametros").set(copiaParams),
+      db.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS)))
+    ]).then(function () {
+      toast("Ajustes guardados. Cuéntale al bot si cambiaste un costo.");
+    }).catch(function (e) {
+      if (e && e.code === "invalid_argument") {
+        puedeEscribir = false; pintarAjustes();
+        toast("No tienes permiso para cambiar los ajustes");
+      } else { toast("No se pudieron guardar los ajustes"); }
+    });
   }
 
   // ── Producción ────────────────────────────────────────────────────
@@ -719,15 +1326,47 @@
   }
 
   // ── Arranque ──────────────────────────────────────────────────────
-  function conectarFormulario() {
-    ["f-producto","f-cliente","f-cantidad","f-pintado","f-tintas","f-relieve"].forEach(function (id) {
-      var el = $(id);
-      el.addEventListener("input", refrescar);
-      el.addEventListener("change", refrescar);
+  function conectarCabecera() {
+    [["c-cliente","cliente"], ["c-contacto","contacto"], ["c-numero","numero"],
+     ["c-notas","notas"]].forEach(function (par) {
+      var el = $(par[0]);
+      el.value = cot[par[1]] || "";
+      el.oninput = function () { cot[par[1]] = el.value; recalcular(); guardarBorrador(); };
+    });
+
+    [["c-desc","descuento"], ["c-urgencia","urgencia"], ["c-envio","envio"],
+     ["c-desarrollo","desarrollo"], ["c-anticipo","anticipo"], ["c-validez","validez"],
+     ["c-plazo","plazo"]].forEach(function (par) {
+      var el = $(par[0]);
+      el.value = cot.cond[par[1]];
+      el.oninput = function () {
+        cot.cond[par[1]] = el.type === "number" ? numero(el.value, 0) : el.value;
+        recalcular(); guardarBorrador();
+      };
+    });
+    var iva = $("c-iva");
+    iva.checked = cot.cond.iva !== false;
+    iva.onchange = function () { cot.cond.iva = iva.checked; recalcular(); guardarBorrador(); };
+  }
+
+  function conectarAcciones() {
+    $("b-agregar").addEventListener("click", function () {
+      if (cot.items.length >= MAX_ITEMS) return;
+      cot.items.push(itemNuevo());
+      pintarItems(); guardarBorrador();
+      var cards = $("lista-items").children;
+      var ultima = cards[cards.length - 1];
+      if (ultima) ultima.querySelector('input[type="text"]').focus();
+    });
+
+    $("b-limpiar").addEventListener("click", function () {
+      cot = cotizacionNueva();
+      conectarCabecera(); pintarItems(); guardarBorrador();
+      toast("Cotización nueva: " + cot.numero);
     });
 
     $("b-pdf").addEventListener("click", function () {
-      if (!ultimo) return;
+      if (!ultimo || !ultimo.buenas.length) return;
       var salida = generarPDF(ultimo);
       if (!salida) return;
       var nombre = "Cotizacion_" + salida.numero +
@@ -743,19 +1382,28 @@
     });
 
     $("b-guardar").addEventListener("click", function () {
-      if (!ultimo) return;
+      var r = ultimo;
+      if (!r || !r.buenas.length) return;
       if (!db) { toast("No hay conexión con la base: la cotización no se guardó"); return; }
       var doc = {
-        fecha: hoyISO(), producto: ultimo.producto, cliente: ultimo.cliente,
-        cantidad: ultimo.cantidad, tamano: ultimo.tamano, dificultad: ultimo.dificultad,
-        minutos: ultimo.minutos, pvp: Math.round(ultimo.pvp),
-        con_iva: Math.round(ultimo.conIva), total_pedido: Math.round(ultimo.totalPedido),
-        costo_gastos: Math.round(ultimo.granTotal),
-        creado_en: new Date().toISOString()
+        fecha: hoyISO(), numero: r.numero, cliente: r.cliente, contacto: r.contacto,
+        piezas: r.piezas, referencias: r.buenas.length,
+        lineas: r.buenas.map(function (l) {
+          return { producto:l.producto, cantidad:l.cantidad, tamano:l.tamano,
+                   dificultad:l.dificultad, minutos:l.minutos,
+                   pvp:Math.round(l.pvp), descuento_pct:l.descuentoPct,
+                   total:Math.round(l.total), costo_gastos:Math.round(l.granTotal),
+                   notas:l.notas };
+        }),
+        condiciones: r.cond, notas: r.notas,
+        subtotal: Math.round(r.subtotal), descuento: Math.round(r.descuento),
+        urgencia: Math.round(r.urgencia), envio: Math.round(r.envio),
+        desarrollo: Math.round(r.desarrollo), iva: Math.round(r.iva),
+        total: Math.round(r.total), creado_en: new Date().toISOString()
       };
       if (miId) doc.creado_por = miId;
       db.collection("cotizaciones").add(doc)
-        .then(function () { toast("Cotización guardada"); })
+        .then(function () { toast("Cotización " + r.numero + " guardada"); })
         .catch(function (e) {
           if (e && e.code === "invalid_argument") {
             puedeEscribir = false; $("b-guardar").disabled = true;
@@ -764,9 +1412,14 @@
         });
     });
 
+    $("b-guardar-ajustes").addEventListener("click", guardarAjustes);
+    $("b-descartar").addEventListener("click", function () {
+      pintarAjustes(); toast("Los campos volvieron a los valores guardados");
+    });
+
     $("b-nuevo").addEventListener("click", function () {
-      var cliente = $("n-cliente").value.trim();
-      var desc = $("n-desc").value.trim();
+      var cliente = limpio($("n-cliente").value);
+      var desc = limpio($("n-desc").value);
       if (!cliente && !desc) { toast("Ponle al menos un cliente o una descripción"); return; }
       var nuevo = {
         cliente: cliente, descripcion: desc,
@@ -796,20 +1449,22 @@
       });
     });
 
-    // Pestañas
-    [["tab-cotizador","vista-cotizador"], ["tab-produccion","vista-produccion"]].forEach(function (par, i, todos) {
+    var pestanas = [["tab-cotizador","vista-cotizador"], ["tab-produccion","vista-produccion"],
+                    ["tab-ajustes","vista-ajustes"]];
+    pestanas.forEach(function (par) {
       $(par[0]).addEventListener("click", function () {
-        todos.forEach(function (p) {
+        pestanas.forEach(function (p) {
           var activa = p[0] === par[0];
           $(p[0]).setAttribute("aria-selected", String(activa));
           $(p[1]).hidden = !activa;
         });
+        if (par[0] === "tab-ajustes") pintarAjustes();
         try { localStorage.setItem("amphora-tab", par[0]); } catch (e) {}
       });
     });
     try {
       var guardada = localStorage.getItem("amphora-tab");
-      if (guardada === "tab-produccion") $("tab-produccion").click();
+      if (guardada === "tab-produccion" || guardada === "tab-ajustes") $(guardada).click();
     } catch (e) {}
   }
 
@@ -827,7 +1482,7 @@
           $("prod-lectura").innerHTML = '<div class="aviso-solo-lectura">Estás viendo el tablero en modo lectura: ' +
             'para cambiar avances necesitas permiso de edición en esta página.</div>';
           $("b-guardar").disabled = true;
-          pintarProyectos();
+          pintarProyectos(); pintarAjustes();
         } else if (puede === true) { puedeEscribir = true; }
       }).catch(function () {});
       Promise.resolve(u.id ? u.id() : null).then(function (id) { miId = id || null; }).catch(function () {});
@@ -846,7 +1501,8 @@
           Object.keys(datos).forEach(function (k) {
             if (k in PARAMS && datos[k] !== null && datos[k] !== "") PARAMS[k] = datos[k];
           });
-          refrescar();
+          recalcular();
+          if (!$("vista-ajustes").hidden) pintarAjustes();
         }
       }, function () {});
 
@@ -856,7 +1512,8 @@
           Object.keys(TIEMPOS).forEach(function (etapa) {
             if (datos[etapa]) TIEMPOS[etapa] = datos[etapa];
           });
-          refrescar();
+          recalcular();
+          if (!$("vista-ajustes").hidden) pintarAjustes();
         }
       }, function () {});
 
@@ -883,9 +1540,11 @@
     }).catch(function () { pintarProyectos(); });
   }
 
-  pintarTamanos();
-  conectarFormulario();
-  refrescar();
+  cot = leerBorrador() || cotizacionNueva();
+  conectarCabecera();
+  conectarAcciones();
+  pintarItems();
+  pintarAjustes();
   conectarCapacidades();
   setTimeout(function () {
     if (!db && !proyectos.length) pintarProyectos();
