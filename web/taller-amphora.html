@@ -315,7 +315,7 @@
   // ── Estado ────────────────────────────────────────────────────────
   var entrada = { producto:"", cliente:"", cantidad:50, tamano:"M", pintado:50, tintas:2, relieve:false };
   var ultimo = null;          // último cálculo
-  var db = null, downloads = null, user = null;
+  var db = null, downloads = null, user = null, miId = null;
   var puedeEscribir = null;   // null = todavía no sabemos
   var proyectos = [];
   var nombres = {};
@@ -707,7 +707,7 @@
     if (local) { Object.keys(cambios).forEach(function (k) { local[k] = cambios[k]; }); pintarProyectos(); }
     if (!db) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
     cambios.actualizado_en = new Date().toISOString();
-    if (user && user._id) cambios.actualizado_por = user._id;
+    if (miId) cambios.actualizado_por = miId;
     db.doc("proyectos/" + id).update(cambios).catch(function (e) {
       if (e && e.code === "invalid_argument") {
         puedeEscribir = false; pintarProyectos();
@@ -753,7 +753,7 @@
         costo_gastos: Math.round(ultimo.granTotal),
         creado_en: new Date().toISOString()
       };
-      if (user && user._id) doc.creado_por = user._id;
+      if (miId) doc.creado_por = miId;
       db.collection("cotizaciones").add(doc)
         .then(function () { toast("Cotización guardada"); })
         .catch(function (e) {
@@ -778,7 +778,7 @@
         creado_en: new Date().toISOString(),
         actualizado_en: new Date().toISOString()
       };
-      if (user && user._id) nuevo.actualizado_por = user._id;
+      if (miId) nuevo.actualizado_por = miId;
       if (!db) {
         nuevo.id = "local-" + Date.now();
         proyectos.push(nuevo); pintarProyectos();
@@ -830,7 +830,7 @@
           pintarProyectos();
         } else if (puede === true) { puedeEscribir = true; }
       }).catch(function () {});
-      Promise.resolve(u.id ? u.id() : null).then(function (id) { if (id) user._id = id; }).catch(function () {});
+      Promise.resolve(u.id ? u.id() : null).then(function (id) { miId = id || null; }).catch(function () {});
       Promise.resolve(u.me ? u.me() : null).then(function (yo) {
         if (yo && yo.name) $("quien").textContent = "Hola, " + yo.name.split(" ")[0];
       }).catch(function () {});

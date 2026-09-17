@@ -16,17 +16,13 @@ lo que falta está abajo con lo que hace falta para cerrarlo.
 
 ## Lo que falta
 
-### 1. Publicar la página — desde la cuenta personal, NO la de Globetek
-`web/taller-amphora.html` está lista. Se publica como Artifact con capacidades
-`db`, `user` (scopes profile) y `downloads`.
+### 1. ~~Publicar la página~~ — HECHO el 2026-09-17
+**https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j** — publicada desde la cuenta
+personal (camilo.iraizoz@gmail.com), con `db`, `user` y `downloads`, y con
+`config/parametros` y `config/tiempos` ya sembrados.
 
-**Debe publicarse desde la cuenta personal de Camilo.** Una página con base de datos
-queda dentro de la organización que la publica: si sale bajo Globetek, los datos de
-Bosque y Cielo viven ahí y se pierden el día que Camilo se desvincule.
-
-Al publicarla hay que sembrar en su base:
-- `config/parametros` — los valores que hoy están en `PARAMS_DEFECTO` de `cotizador.py`
-- `config/tiempos` — las tablas de `ETAPAS_TIEMPO`
+Para actualizarla desde otra conversación hay que pasar esa URL como `url` al publicar;
+sin eso se crea un artifact aparte. Es privada hasta que se comparta desde su menú.
 
 **Ojo con la duplicación:** la página recalcula el precio en JavaScript con la misma
 cadena que `execution/cotizador.py`. Si se cambia la fórmula en un lado hay que
