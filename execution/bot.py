@@ -22,6 +22,7 @@ from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas, 
 from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota, \
     registrar_cotizacion as registrar_cotizacion_hs
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
+from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -232,6 +233,20 @@ TOOLS = [
                 "deal_id":          {"type": "string", "description": "ID del negocio de HubSpot al que pertenece esta cotización — opcional. Si se omite, se usa el negocio abierto del contacto o se crea uno nuevo."}
             },
             "required": ["cliente_nombre", "taller_tipo", "taller_participantes", "taller_precio_por_persona"]
+        }
+    },
+
+    # ── Competencia ──────────────────────────────────────────────────────────────
+    {
+        "name": "barrer_competencia",
+        "description": "Consulta los precios públicos de la competencia (productos de cerámica y talleres) en Bogotá, Cali y Medellín, los guarda en la pestaña Competencia del Sheet y devuelve un resumen. TARDA entre 30 segundos y 2 minutos: avisa al usuario antes de llamarlo. Para consultar barridos anteriores sin volver a salir a internet, usa leer_sheet sobre la pestaña Competencia.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tipo":   {"type": "string", "description": "productos | talleres. Vacío = ambos."},
+                "ciudad": {"type": "string", "description": "Bogotá | Medellín | Cali. Vacío = todas."}
+            },
+            "required": []
         }
     },
 
@@ -521,6 +536,25 @@ REGLAS:
 - Siempre se adjunta el PDF de la cotización, además del cuerpo del correo.
 
 ────────────────────────────────────────
+MÓDULO COMPETENCIA
+────────────────────────────────────────
+barrer_competencia(tipo, ciudad) → lee los precios públicos de la competencia y los
+guarda en la pestaña Competencia del Sheet, con la fecha. Ver Directivas/analisis_competencia.md
+
+- TARDA 30s-2min. Avisa "voy a consultar, dame un momento" ANTES de llamarlo.
+- "¿cómo están los precios de tazas en Bogotá?" → barrer_competencia(tipo="productos", ciudad="Bogotá")
+- "revisa la competencia de talleres" → barrer_competencia(tipo="talleres")
+- Para mirar barridos pasados SIN salir a internet → leer_sheet("Competencia!A:I")
+
+REGLAS:
+- Varios competidores NO publican precios (los dan por WhatsApp o Instagram). Cuando el
+  resumen los liste como "No publican precios", dilo tal cual. NUNCA estimes un precio.
+- Al comparar con los precios de Bosque y Cielo, usa rango y mediana, y recuerda que
+  tamaño, técnica y acabado cambian el precio: no saques conclusiones de un solo número.
+- En Cali todavía no hay competidores cargados: si preguntan por Cali, dilo y ofrece
+  agregar los que Camilo o Daniela conozcan.
+
+────────────────────────────────────────
 MÓDULO PRODUCCIÓN — DOS PROCESOS
 ────────────────────────────────────────
 PROCESO 1 (Clásico):  modelado → secado → primera quema → esmaltado → segunda quema → acabado → empaque → entregado
@@ -721,6 +755,12 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         if not resultado.startswith("Error"):
                             resultado += "\n" + registrar_cotizacion_hs(
                                 datos, paquete, inp.get("deal_id", ""))
+                    # ── Competencia ─────────────────────────────────────────
+                    elif name == "barrer_competencia":
+                        _filas = _comp_barrer(inp.get("tipo", ""), inp.get("ciudad", ""))
+                        resultado = _comp_resumen(_filas)
+                        if _filas:
+                            resultado += "\n\n" + _comp_guardar(_filas)
                     # ── Producción ───────────────────────────────────────────
                     elif name == "agregar_pedido_produccion":
                         resultado = _prod_agregar(
