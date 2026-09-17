@@ -15,7 +15,7 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 sys.path.insert(0, str(Path(__file__).parent))
 
 from cotizador import (COTIZADOR_SHEET_ID, PARAMS_DEFECTO, PESTANA_PARAMS,
-                       TAMANOS, TIEMPOS_ACABADO)
+                       TAMANOS, TIEMPOS_ACABADO, _rango)
 from sheets import crear_pestana, escribir_rango
 
 NOTAS = {
@@ -50,7 +50,7 @@ def setup():
     print(crear_pestana(PESTANA_PARAMS, sheet_id=COTIZADOR_SHEET_ID))
     filas = [["Parámetro", "Valor", "Notas"]]
     filas += [[clave, valor, NOTAS.get(clave, "")] for clave, valor in PARAMS_DEFECTO.items()]
-    print(escribir_rango(f"{PESTANA_PARAMS}!A1:C{len(filas)}", filas,
+    print(escribir_rango(_rango(PESTANA_PARAMS, f"A1:C{len(filas)}"), filas,
                          sheet_id=COTIZADOR_SHEET_ID))
 
     print(crear_pestana("Tiempos Acabado", sheet_id=COTIZADOR_SHEET_ID))
@@ -64,7 +64,7 @@ def setup():
     tiempos.append([])
     tiempos.append(["Minutos de acabado por pieza (Discovery 2026-09). "
                     "Las celdas vacías son tiempos que todavía no se han medido."])
-    print(escribir_rango(f"Tiempos Acabado!A1:D{len(tiempos)}", tiempos,
+    print(escribir_rango(_rango("Tiempos Acabado", f"A1:D{len(tiempos)}"), tiempos,
                          sheet_id=COTIZADOR_SHEET_ID))
 
     print("\nListo. Las filas marcadas PENDIENTE en Notas son las que hay que llenar "

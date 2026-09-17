@@ -46,10 +46,10 @@ def leer_sheet(rango: str, sheet_id: str = "") -> str:
         return f"Error leyendo {rango}: {e}"
 
 
-def agregar_fila(rango: str, valores: list) -> str:
+def agregar_fila(rango: str, valores: list, sheet_id: str = "") -> str:
     try:
         _service().spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
             range=rango,
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
@@ -73,10 +73,10 @@ def actualizar_celda(rango: str, valor: str) -> str:
         return f"Error: {e}"
 
 
-def listar_pestanas() -> str:
+def listar_pestanas(sheet_id: str = "") -> str:
     try:
         result = _service().spreadsheets().get(
-            spreadsheetId=SPREADSHEET_ID
+            spreadsheetId=sheet_id or SPREADSHEET_ID
         ).execute()
         names = [s["properties"]["title"] for s in result.get("sheets", [])]
         return ", ".join(names)

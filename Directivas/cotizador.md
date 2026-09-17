@@ -126,6 +126,32 @@ Preguntables hoy: `costo_bizcocho`, `costo_esmaltes`, `costo_empaque`, `costo_vi
 La pestaña de parámetros se crea sola la primera vez que se guarda un valor, así que no
 hace falta correr el setup a mano.
 
+## Cada cotización deja su hoja
+Cuando el precio ya es el definitivo, `guardar_hoja_cotizacion` crea en el Cotizador
+Interno una pestaña con **todo el desglose**: la pieza, los minutos, cada línea de costo,
+el margen, el IVA, las advertencias y **los parámetros exactos que se usaron**. Con eso
+se puede reproducir cualquier precio meses después y entender por qué dio lo que dio.
+
+Además se registra una fila en la pestaña índice **Cotizaciones** (fecha, número,
+producto, cantidad, PVP, total, y en qué pestaña está el detalle).
+
+No se guarda en cada tanteo de precio, solo cuando el precio es el bueno o se va a enviar
+la cotización — si no, el archivo se llena de hojas basura.
+
+## El esmalte se carga en onzas
+El galón de 128 oz cuesta $260.000, o sea **$2.031 la onza**. Es más fácil saber cuántas
+onzas lleva una pieza que cuántos pesos, así que el bot pregunta `oz_esmalte_por_pieza` y
+saca el costo. Si de todos modos se carga `costo_esmaltes` en pesos, las onzas mandan
+cuando están puestas. Los demás materiales de referencia (barbotina $140/oz, arcilla Luis
+Reyes $4.80/g, arcilla negra $3.91/g) están en `MATERIALES` de `cotizador.py`.
+
+## Gotcha: los nombres de pestaña con espacios van entre comillas
+`Parámetros Cotizador!A2:B60` NO se puede parsear; tiene que ser
+`'Parámetros Cotizador'!A2:B60`. Para eso está el helper `_rango()`. Como
+`leer_sheet_numericos` se traga los errores y devuelve `[]`, un rango mal armado hacía
+que el cotizador usara los valores de respaldo **en silencio** y el precio no cambiara
+nunca por más datos que se guardaran. Ahora `cotizar` avisa cuando no pudo leer la hoja.
+
 ## Lo que falta cargar (al 2026-09-17)
 En la hoja están en cero, así que **hoy el precio sale por debajo del real**:
 `costo_bizcocho`, `costo_esmaltes`, `costo_empaque` y `minutos_otros_pasos`.

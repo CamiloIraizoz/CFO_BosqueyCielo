@@ -69,7 +69,8 @@ PARAMS_DEFECTO = {
     "iva_pct":                19.0,
     # Costos por pieza — los pide el bot cuando faltan
     "costo_bizcocho":         0,
-    "costo_esmaltes":         0,
+    "costo_esmaltes":         0,      # o se deriva de oz_esmalte_por_pieza
+    "oz_esmalte_por_pieza":   0.0,    # onzas de esmalte que lleva una pieza
     "costo_vinilo":           0,
     "costo_empaque":          0,
     # Las quemas NO son costo directo: su energía ya está dentro de servicios
@@ -83,10 +84,30 @@ PARAMS_DEFECTO = {
     "minutos_otros_pasos":    0.0,
 }
 
+# Referencia de materiales de la hoja "Cotizador Interno" (2026-09-17).
+# Sirven para derivar el costo por pieza a partir del consumo: es mucho más fácil
+# saber "lleva 1.5 onzas de esmalte" que "el esmalte cuesta $3.000 por pieza".
+MATERIALES = {
+    "esmalte_blanco":   {"nombre": "Esmalte blanco",           "precio": 260_000, "unidades": 128,    "unidad": "oz"},
+    "barbotina_blanca": {"nombre": "Barbotina Blanca Marino",  "precio": 18_000,  "unidades": 128,    "unidad": "oz"},
+    "arcilla_reyes":    {"nombre": "Arcilla Luis Reyes",       "precio": 4_800,   "unidades": 1_000,  "unidad": "g"},
+    "arcilla_negra":    {"nombre": "Arcilla Negra Jorge Pérez","precio": 39_100,  "unidades": 10_000, "unidad": "g"},
+}
+
+
+def precio_unitario_material(clave: str) -> float:
+    """Precio por onza o por gramo de un material de referencia."""
+    m = MATERIALES[clave]
+    return m["precio"] / m["unidades"]
+
+
 # Lo que el bot puede preguntar y guardar solo. El texto es la pregunta literal.
 PARAMS_PREGUNTABLES = {
     "costo_bizcocho":      "¿Cuánto te cuesta el bizcocho por pieza?",
-    "costo_esmaltes":      "¿Cuánto cuestan los esmaltes por pieza?",
+    "oz_esmalte_por_pieza": "¿Cuántas onzas de esmalte lleva una pieza? "
+                            f"(el galón de 128 oz cuesta $260.000, o sea ${precio_unitario_material('esmalte_blanco'):,.0f} la onza)".replace(",", "."),
+    "costo_esmaltes":      "¿Cuánto cuestan los esmaltes por pieza? "
+                           "(si prefieres, dime las onzas y yo saco el valor)",
     "costo_empaque":       "¿Cuánto cuesta el empaque por pieza?",
     "costo_vinilo":        "¿Cuánto cuesta el vinilo o transfer por pieza? (0 si no lleva)",
     "minutos_otros_pasos": "Además del acabado, ¿cuántos minutos por pieza se van en "
@@ -129,6 +150,12 @@ def grado_acabado(pct_pintado: float, num_tintas: int, solo_relieve: bool = Fals
     return "facil" if puntos <= 1 else ("medio" if puntos <= 3 else "dificil")
 
 
+def _rango(pestana: str, celdas: str) -> str:
+    """'Parámetros Cotizador'!A2:B60 — las comillas son obligatorias cuando el
+    nombre de la pestaña tiene espacios; sin ellas la API no parsea el rango."""
+    return f"'{pestana}'!{celdas}"
+
+
 def _fmt(n) -> str:
     return f"${int(round(n)):,}".replace(",", ".")
 
@@ -143,24 +170,40 @@ def fijos_locativos_mes(params: dict) -> float:
 def parametros_pendientes(params: dict = None) -> list:
     """Parámetros preguntables que siguen en cero, en orden de impacto en el precio."""
     params = params or cargar_parametros()
-    orden = ["costo_bizcocho", "costo_esmaltes", "costo_empaque", "minutos_otros_pasos"]
-    return [c for c in orden if float(params.get(c, 0) or 0) == 0]
+    pendientes = []
+    if not float(params.get("costo_bizcocho", 0) or 0):
+        pendientes.append("costo_bizcocho")
+    # El esmalte está resuelto si hay onzas O valor en pesos.
+    if not (float(params.get("oz_esmalte_por_pieza", 0) or 0)
+            or float(params.get("costo_esmaltes", 0) or 0)):
+        pendientes.append("oz_esmalte_por_pieza")
+    for clave in ["costo_empaque", "minutos_otros_pasos"]:
+        if not float(params.get(clave, 0) or 0):
+            pendientes.append(clave)
+    return pendientes
 
 
 def cargar_parametros() -> dict:
-    """Lee la pestaña de parámetros. Si no se puede, usa los valores de respaldo."""
+    """Lee la pestaña de parámetros. Si no se puede, usa los valores de respaldo
+    y lo deja anotado en _origen para que la cotización lo advierta."""
     params = dict(PARAMS_DEFECTO)
+    params["_origen"] = "respaldo"
     try:
         from sheets import leer_sheet_numericos
-        filas = leer_sheet_numericos(f"{PESTANA_PARAMS}!A2:B60", sheet_id=COTIZADOR_SHEET_ID)
+        filas = leer_sheet_numericos(_rango(PESTANA_PARAMS, "A2:B60"),
+                                     sheet_id=COTIZADOR_SHEET_ID)
+        leidos = 0
         for fila in filas:
             if len(fila) < 2 or not str(fila[0]).strip():
                 continue
             clave = str(fila[0]).strip()
-            if clave not in params:
+            if clave not in PARAMS_DEFECTO:
                 continue
             valor = fila[1]
             params[clave] = valor if clave == "margen_modo" else float(valor or 0)
+            leidos += 1
+        if leidos:
+            params["_origen"] = "hoja"
     except Exception as e:
         print(f"[cotizador] Usando parámetros de respaldo ({e})")
     return params
@@ -174,8 +217,9 @@ def asegurar_pestana_parametros() -> str:
         return respuesta
     filas = [["Parámetro", "Valor", "Notas"]]
     filas += [[c, v, PARAMS_PREGUNTABLES.get(c, "")] for c, v in PARAMS_DEFECTO.items()]
-    escribir_rango(f"{PESTANA_PARAMS}!A1:C{len(filas)}", filas, sheet_id=COTIZADOR_SHEET_ID)
-    return respuesta
+    escritura = escribir_rango(_rango(PESTANA_PARAMS, f"A1:C{len(filas)}"), filas,
+                               sheet_id=COTIZADOR_SHEET_ID)
+    return respuesta if not escritura.startswith("Error") else escritura
 
 
 def guardar_parametro(clave: str, valor) -> str:
@@ -186,7 +230,8 @@ def guardar_parametro(clave: str, valor) -> str:
     try:
         from sheets import leer_sheet_numericos, escribir_rango
         asegurar_pestana_parametros()
-        filas = leer_sheet_numericos(f"{PESTANA_PARAMS}!A1:A60", sheet_id=COTIZADOR_SHEET_ID)
+        filas = leer_sheet_numericos(_rango(PESTANA_PARAMS, "A1:A60"),
+                                     sheet_id=COTIZADOR_SHEET_ID)
         fila_destino = None
         for i, fila in enumerate(filas, start=1):
             if fila and str(fila[0]).strip() == clave:
@@ -194,10 +239,14 @@ def guardar_parametro(clave: str, valor) -> str:
                 break
         if fila_destino is None:
             fila_destino = len(filas) + 1
-            escribir_rango(f"{PESTANA_PARAMS}!A{fila_destino}", [[clave]],
+            escribir_rango(_rango(PESTANA_PARAMS, f"A{fila_destino}"), [[clave]],
                            sheet_id=COTIZADOR_SHEET_ID)
-        escribir_rango(f"{PESTANA_PARAMS}!B{fila_destino}", [[valor]],
-                       sheet_id=COTIZADOR_SHEET_ID)
+        # Bug 2: antes se daba por guardado sin mirar el resultado, así que un
+        # error de la API se reportaba como éxito y el precio no cambiaba.
+        escritura = escribir_rango(_rango(PESTANA_PARAMS, f"B{fila_destino}"), [[valor]],
+                                   sheet_id=COTIZADOR_SHEET_ID)
+        if escritura.startswith("Error"):
+            return f"❌ No se pudo guardar {clave}: {escritura}"
         return f"✅ Guardado: {clave} = {valor}"
     except Exception as e:
         return f"No se pudo guardar {clave}: {e}"
@@ -209,6 +258,11 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     """Calcula el precio de una pieza y del pedido. Devuelve el desglose completo."""
     params = params or cargar_parametros()
     advertencias = []
+
+    if params.get("_origen") == "respaldo":
+        advertencias.append(
+            "No pude leer la pestaña de parámetros del Cotizador Interno: estoy usando "
+            "los valores de respaldo. Lo que cambies en la hoja no se está aplicando.")
 
     tamano = (tamano or "M").upper()
     if tamano not in TIEMPOS_ACABADO:
@@ -237,7 +291,11 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     costo_mo    = (minutos_totales / 60.0) * valor_hora
 
     # ── Materiales y proceso ────────────────────────────────────────────────
-    materiales = (float(params["costo_bizcocho"]) + float(params["costo_esmaltes"])
+    # El esmalte se puede cargar en pesos por pieza o en onzas: si hay onzas, mandan.
+    onzas = float(params.get("oz_esmalte_por_pieza", 0) or 0)
+    costo_esmaltes = (onzas * precio_unitario_material("esmalte_blanco")
+                      if onzas else float(params["costo_esmaltes"]))
+    materiales = (float(params["costo_bizcocho"]) + costo_esmaltes
                   + float(params["costo_vinilo"]))
     quemas = (float(params["costo_quema_bizcocho"]) + float(params["costo_quema_esmalte"])
               + float(params["costo_quema_transfer"]))
@@ -246,7 +304,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     # Las quemas no se listan: su energía ya va dentro de servicios públicos.
     faltantes = [n for n, v in [
         ("bizcocho", params["costo_bizcocho"]),
-        ("esmaltes", params["costo_esmaltes"]),
+        ("esmaltes", costo_esmaltes),
         ("empaque", params["costo_empaque"])] if float(v) == 0]
     if faltantes:
         advertencias.append("Sin costo cargado: " + ", ".join(faltantes) +
@@ -308,7 +366,106 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         "total_pedido_con_iva": round(con_iva * cantidad),
         "volumen_referencia": int(volumen),
         "advertencias": advertencias,
+        "params_usados": {k: v for k, v in params.items() if not k.startswith("_")},
     }
+
+
+PESTANA_INDICE = "Cotizaciones"
+
+
+def _nombre_pestana(r: dict, numero: str = "") -> str:
+    """Nombre corto y único para la pestaña de una cotización."""
+    from datetime import date
+    base = numero or f"Cot {date.today().strftime('%d-%m')}"
+    producto = (r.get("producto") or "").strip()
+    if producto:
+        base = f"{base} {producto}"
+    base = base.replace("/", "-").replace("\\", "-")[:80]
+
+    try:
+        from sheets import listar_pestanas
+        existentes = listar_pestanas(sheet_id=COTIZADOR_SHEET_ID)
+    except Exception:
+        existentes = ""
+    if base not in existentes:
+        return base
+    for i in range(2, 50):
+        candidato = f"{base} ({i})"
+        if candidato not in existentes:
+            return candidato
+    return base
+
+
+def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
+    """Deja una pestaña con el desglose completo de una cotización, para poder
+    auditar de dónde salió el precio. Registra también una fila en el índice."""
+    from datetime import date
+    from sheets import agregar_fila, crear_pestana, escribir_rango
+
+    hoy = date.today().strftime("%d/%m/%Y")
+    pestana = _nombre_pestana(r, numero)
+    respuesta = crear_pestana(pestana, sheet_id=COTIZADOR_SHEET_ID)
+    if respuesta.startswith("Error"):
+        return f"❌ No se pudo crear la hoja: {respuesta}"
+
+    p = r.get("params_usados", {})
+    filas = [
+        [f"COTIZACIÓN — {r.get('producto') or 'Pieza'}", "", ""],
+        ["Fecha", hoy, ""],
+        ["Número", numero, ""],
+        ["", "", ""],
+        ["LA PIEZA", "", ""],
+        ["Cantidad", r["cantidad"], "piezas"],
+        ["Tamaño", r["tamano"], ""],
+        ["Dificultad del acabado", r["dificultad"], ""],
+        ["Minutos de acabado", r["minutos_acabado"], "estándar del Discovery"],
+        ["Minutos de los demás pasos", p.get("minutos_otros_pasos", 0), ""],
+        ["Minutos totales por pieza", r["minutos_totales"], ""],
+        ["Valor hora de taller", r["valor_hora"], "salario / horas del mes"],
+        ["", "", ""],
+        ["COSTO POR PIEZA", "", ""],
+    ]
+    notas_desglose = {"Quemas": "en cero: su energía ya va en servicios públicos"}
+    filas += [[etiqueta, round(valor), notas_desglose.get(etiqueta, "")]
+              for etiqueta, valor in r["desglose"]]
+    filas += [
+        ["Costo + gastos por pieza", r["gran_total"], ""],
+        ["", "", ""],
+        ["PRECIO", "", ""],
+        [f"Margen ({p.get('margen_pct', 0)}% sobre el costo)", r["margen_unitario"], ""],
+        ["PVP por pieza (sin IVA)", r["pvp_unitario"], ""],
+        [f"IVA ({p.get('iva_pct', 0)}%)", r["iva_unitario"], ""],
+        ["Precio por pieza con IVA", r["precio_con_iva"], ""],
+        ["", "", ""],
+        ["EL PEDIDO", "", ""],
+        ["Total sin IVA", r["total_pedido_sin_iva"], ""],
+        ["Total con IVA", r["total_pedido_con_iva"], ""],
+    ]
+
+    if r.get("advertencias"):
+        filas += [["", "", ""], ["OJO", "", ""]]
+        filas += [["", a, ""] for a in r["advertencias"]]
+
+    filas += [["", "", ""], ["PARÁMETROS USADOS", "", "para poder reproducir el cálculo"]]
+    filas += [[clave, valor, ""] for clave, valor in sorted(p.items())]
+
+    escritura = escribir_rango(_rango(pestana, f"A1:C{len(filas)}"), filas,
+                               sheet_id=COTIZADOR_SHEET_ID)
+    if escritura.startswith("Error"):
+        return f"❌ No se pudo escribir la hoja: {escritura}"
+
+    # Índice, para verlas todas de un vistazo
+    if "creada" in crear_pestana(PESTANA_INDICE, sheet_id=COTIZADOR_SHEET_ID):
+        escribir_rango(_rango(PESTANA_INDICE, "A1:H1"),
+                       [["Fecha", "Número", "Producto", "Cantidad", "Tamaño",
+                         "PVP sin IVA", "Total pedido con IVA", "Hoja"]],
+                       sheet_id=COTIZADOR_SHEET_ID)
+    agregar_fila(_rango(PESTANA_INDICE, "A:H"),
+                 [hoy, numero, r.get("producto", ""), r["cantidad"], r["tamano"],
+                  r["pvp_unitario"], r["total_pedido_con_iva"], pestana],
+                 sheet_id=COTIZADOR_SHEET_ID)
+
+    return f"📄 Detalle guardado en la pestaña '{pestana}' del Cotizador Interno."
 
 
 def formato_telegram(r: dict) -> str:

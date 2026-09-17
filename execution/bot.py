@@ -24,7 +24,8 @@ from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
-    guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS
+    guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
+    guardar_hoja_cotizacion as _cot_guardar_hoja
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -258,6 +259,22 @@ TOOLS = [
         }
     },
 
+    {
+        "name": "guardar_hoja_cotizacion",
+        "description": "Deja en el Cotizador Interno una pestaña con el desglose completo del último precio calculado, para que Camilo pueda revisar de dónde salió. Llámalo cuando el usuario acepte un precio, pida guardar el detalle, o justo antes de enviar la cotización al cliente. NO lo llames en cada tanteo de precio: solo cuando el precio ya es el bueno.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "producto":  {"type": "string"},
+                "cantidad":  {"type": "integer"},
+                "tamano":    {"type": "string", "description": "XS | S | M | L | XL"},
+                "dificultad": {"type": "string", "description": "facil | medio | dificil"},
+                "minutos_acabado": {"type": "number"},
+                "numero":    {"type": "string", "description": "Número de cotización si ya existe (ej. BYC-604084)"}
+            },
+            "required": ["cantidad", "tamano"]
+        }
+    },
     {
         "name": "guardar_parametro_cotizador",
         "description": "Guarda un costo o parámetro del cotizador en la hoja, para no volver a preguntarlo nunca. Úsalo apenas el usuario te diga un valor que falta (ej. 'el bizcocho me cuesta 8000' → guardar_parametro_cotizador('costo_bizcocho', 8000)). Parámetros: costo_bizcocho, costo_esmaltes, costo_empaque, costo_vinilo, minutos_otros_pasos, volumen_referencia, margen_pct, salario_mensual, arriendo_mes, servicios_mes, pct_uso_local, pct_uso_servicios, gastos_admin_mes, desperdicio_pct, mercadeo_pct, iva_pct.",
@@ -594,9 +611,17 @@ y ACTO SEGUIDO pregunta por esos valores, uno por uno, en lenguaje llano:
    "Para que el precio quede completo me falta un dato: ¿cuánto te cuesta el bizcocho
     por pieza?"
 Cuando el usuario responda → guardar_parametro_cotizador(parametro, valor) → vuelve a
-llamar calcular_precio para mostrar el precio ya corregido. Pregunta de a un dato por
+llamar calcular_precio para mostrar el precio ya corregido. Si el guardado devuelve ❌,
+DILO: significa que el dato no quedó guardado y el precio no va a cambiar.
+Para el esmalte pregunta las ONZAS por pieza (oz_esmalte_por_pieza): es más fácil de
+responder que un valor en pesos, y el galón de 128 oz a $260.000 da $2.031 la onza. Pregunta de a un dato por
 mensaje, no los cuatro de una. Si el usuario no sabe o dice "después", sigue sin
 insistir: se pregunta de nuevo en la siguiente cotización.
+
+DEJA CONSTANCIA: cuando el precio ya sea el definitivo (el usuario lo acepta, o vas a
+enviar la cotización), llama guardar_hoja_cotizacion con los mismos datos. Eso deja en
+el Cotizador Interno una pestaña con todo el desglose y los parámetros usados, para que
+Camilo pueda entrar a revisar cómo se calculó. NO lo llames en cada tanteo.
 
 REGLAS:
 - El resultado trae ADVERTENCIAS (⚠️). Muéstralas SIEMPRE, sin excepción. Mientras haya
@@ -842,6 +867,15 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                                 inp.get("minutos_acabado"), producto=inp.get("producto", "")))
                         except ValueError as e:
                             resultado = f"No se pudo calcular: {e}"
+                    elif name == "guardar_hoja_cotizacion":
+                        try:
+                            _r = _cotizar(inp["cantidad"], inp["tamano"],
+                                          inp.get("dificultad", "medio"),
+                                          inp.get("minutos_acabado"),
+                                          producto=inp.get("producto", ""))
+                            resultado = _cot_guardar_hoja(_r, inp.get("numero", ""))
+                        except ValueError as e:
+                            resultado = f"No se pudo guardar la hoja: {e}"
                     elif name == "guardar_parametro_cotizador":
                         resultado = _cot_guardar_param(inp["parametro"], inp["valor"])
                     # ── Competencia ─────────────────────────────────────────
