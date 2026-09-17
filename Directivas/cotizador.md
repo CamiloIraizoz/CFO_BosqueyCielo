@@ -41,9 +41,10 @@ veces e inflar el precio (en una taza M, unos $17.000). Los parámetros
 `costo_quema_*` existen pero van en **cero**, y solo se llenarían si algún día se mide
 el consumo por hornada y se saca ese valor de servicios públicos.
 
-Como las quemas consumen bastante energía, vale la pena revisar `pct_uso_servicios`:
-hoy está en 20%, igual que el arriendo. Si producción consume más que eso, subirlo
-cambia el precio (al 60%, los fijos por pieza pasan de $2.800 a $4.133).
+Por eso `pct_uso_servicios` está en **70%** (decisión de Camilo, 2026-09-17), muy por
+encima del 20% del arriendo: el arriendo se reparte por metros cuadrados, pero la
+energía la consumen los hornos. Con eso los fijos locativos quedan en $1.340.000/mes,
+o **$4.467 por pieza** sobre 300 piezas/mes.
 
 ## Dos decisiones de negocio (2026-09-17, con Camilo)
 
@@ -109,7 +110,7 @@ respaldo embebidos en `cotizador.py` y lo avisa en consola.
 
 Estructura actual: salario mensual $4.000.000 sobre 192 horas → hora de taller $20.833 ·
 gastos administrativos $1.230.000/mes · arriendo $3.200.000 al 20% de uso ·
-servicios $1.000.000 al 20% de uso · desperdicio 10% · mercadeo 5% ·
+servicios $1.000.000 al 70% de uso · desperdicio 10% · mercadeo 5% ·
 margen 40% sobre el costo · IVA 19%.
 
 ## El bot pregunta lo que falta
@@ -129,8 +130,8 @@ hace falta correr el setup a mano.
 En la hoja están en cero, así que **hoy el precio sale por debajo del real**:
 `costo_bizcocho`, `costo_esmaltes`, `costo_empaque` y `minutos_otros_pasos`.
 
-Como referencia de la diferencia: una taza M de acabado medio da **$17.913** de PVP con
-lo que hay hoy, y **$45.187** con valores de ejemplo cargados.
+Como referencia de la diferencia: una taza M de acabado medio da **$20.247** de PVP con
+lo que hay hoy, y **$47.520** con valores de ejemplo cargados.
 
 ## Casos extremos
 - **Mostrar siempre las advertencias.** Mientras falten costos, el número no es un precio

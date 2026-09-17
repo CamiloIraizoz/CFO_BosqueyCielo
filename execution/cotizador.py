@@ -58,7 +58,9 @@ PARAMS_DEFECTO = {
     "arriendo_mes":           3_200_000,
     "servicios_mes":          1_000_000,  # incluye la energía de las quemas
     "pct_uso_local":          20.0,       # % del local dedicado a producción
-    "pct_uso_servicios":      20.0,       # % de los servicios que carga producción
+    "pct_uso_servicios":      70.0,       # % de los servicios que carga producción — los
+                                          # hornos consumen mucho más que el resto del
+                                          # local (Camilo, 2026-09-17)
     # Porcentajes
     "desperdicio_pct":        10.0,
     "mercadeo_pct":           5.0,
