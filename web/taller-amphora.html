@@ -1,0 +1,894 @@
+<title>Taller Amphora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --ground:#FBF8F6; --surface:#FFFFFF; --surface-2:#F6EEEB;
+    --ink:#2E211F; --muted:#8A7470; --line:#E8DCD8;
+    --accent:#C07082; --accent-deep:#9A4E60; --accent-wash:#F7ECEE;
+    --ok:#4F7A5B; --warn:#B8863B; --crit:#B4524F;
+    --serif:"Fraunces", Georgia, "Times New Roman", serif;
+    --sans:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --r:10px; --shadow:0 1px 2px rgba(46,33,31,.06), 0 8px 24px -12px rgba(46,33,31,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#1A1513; --surface:#241D1B; --surface-2:#2E2523;
+      --ink:#F2E9E6; --muted:#A89692; --line:#392E2B;
+      --accent:#D48A9A; --accent-deep:#E3A7B4; --accent-wash:#33242A;
+      --ok:#7FAE8B; --warn:#D6A95F; --crit:#D97C79;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#1A1513; --surface:#241D1B; --surface-2:#2E2523;
+    --ink:#F2E9E6; --muted:#A89692; --line:#392E2B;
+    --accent:#D48A9A; --accent-deep:#E3A7B4; --accent-wash:#33242A;
+    --ok:#7FAE8B; --warn:#D6A95F; --crit:#D97C79;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing:border-box; }
+  body { background:var(--ground); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; }
+  h1,h2,h3 { font-family:var(--serif); font-weight:600; margin:0; text-wrap:balance; }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ── Cabecera ─────────────────────────────────────────── */
+  header {
+    position:sticky; top:env(safe-area-inset-top, 0px); z-index:20;
+    background:var(--surface); border-bottom:1px solid var(--line);
+  }
+  .head-in { max-width:1120px; margin:0 auto; padding:14px 20px 0;
+             display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; }
+  .marca { font-family:var(--serif); font-size:20px; }
+  .marca span { color:var(--accent); }
+  .sub { font-size:11px; color:var(--muted); letter-spacing:.14em; text-transform:uppercase; }
+  .quien { margin-left:auto; font-size:12px; color:var(--muted); }
+  .tabs { max-width:1120px; margin:0 auto; padding:10px 20px 0; display:flex; gap:4px; }
+  .tab { background:none; border:0; border-bottom:2px solid transparent; cursor:pointer;
+         padding:8px 14px 10px; color:var(--muted); font-weight:500; border-radius:6px 6px 0 0; }
+  .tab:hover { color:var(--ink); }
+  .tab[aria-selected="true"] { color:var(--accent-deep); border-bottom-color:var(--accent); }
+  .tab:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+
+  main { max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:22px 64px; }
+
+  /* ── Cotizador ────────────────────────────────────────── */
+  .cotiza { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,380px); gap:22px; align-items:start; }
+  @media (max-width:880px) { .cotiza { grid-template-columns:1fr; } }
+
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:20px; }
+  .panel + .panel { margin-top:16px; }
+  .panel h2 { font-size:17px; margin-bottom:4px; }
+  .panel .pista { color:var(--muted); font-size:13px; margin:0 0 16px; }
+
+  .campo { display:block; margin-bottom:14px; }
+  .campo > span { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+                  color:var(--muted); margin-bottom:5px; }
+  input[type="text"], input[type="number"], input[type="date"], select, textarea {
+    width:100%; background:var(--ground); border:1px solid var(--line);
+    border-radius:8px; padding:9px 11px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
+  .fila { display:flex; gap:12px; flex-wrap:wrap; }
+  .fila > * { flex:1 1 150px; }
+
+  .segmented { display:flex; gap:6px; flex-wrap:wrap; }
+  .seg { flex:1 1 auto; min-width:52px; text-align:center; cursor:pointer;
+         border:1px solid var(--line); background:var(--ground); border-radius:8px; padding:9px 6px; }
+  .seg[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .seg small { display:block; font-size:10px; opacity:.72; font-weight:400; }
+  .seg:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+  input[type="range"] { width:100%; accent-color:var(--accent); }
+  .grado { display:inline-flex; align-items:center; gap:7px; font-size:13px;
+           background:var(--accent-wash); color:var(--accent-deep);
+           border-radius:999px; padding:5px 12px; font-weight:500; }
+
+  /* ── Resultado ────────────────────────────────────────── */
+  .resultado { position:sticky; top:calc(env(safe-area-inset-top, 0px) + 116px); }
+  @media (max-width:880px) { .resultado { position:static; } }
+  .precio { font-family:var(--serif); font-size:38px; line-height:1.05; letter-spacing:-.01em; }
+  .precio-nota { color:var(--muted); font-size:13px; margin-top:4px; }
+  .desglose { list-style:none; margin:18px 0 0; padding:0; border-top:1px solid var(--line); }
+  .desglose li { display:flex; justify-content:space-between; gap:12px;
+                 padding:7px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .desglose li.total { font-weight:600; border-bottom:0; padding-top:11px; }
+  .desglose li span:first-child { color:var(--muted); }
+  .desglose li.total span:first-child { color:var(--ink); }
+
+  .avisos { margin-top:16px; display:grid; gap:8px; }
+  .aviso { display:flex; gap:9px; font-size:13px; line-height:1.45;
+           background:var(--surface-2); border-left:3px solid var(--warn);
+           border-radius:0 8px 8px 0; padding:10px 12px; }
+  .aviso.duro { border-left-color:var(--crit); }
+
+  .acciones { display:flex; gap:9px; flex-wrap:wrap; margin-top:18px; }
+  .btn { cursor:pointer; border:1px solid var(--accent); background:var(--accent); color:#fff;
+         border-radius:8px; padding:10px 16px; font-weight:500; }
+  .btn.sec { background:transparent; color:var(--accent-deep); }
+  .btn.fantasma { background:transparent; border-color:var(--line); color:var(--ink); }
+  .btn:hover { filter:brightness(1.06); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; filter:none; }
+  .btn:focus-visible { outline:2px solid var(--accent-deep); outline-offset:2px; }
+
+  /* ── Producción ───────────────────────────────────────── */
+  .proyectos { display:grid; gap:14px; }
+  .proyecto { background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+              padding:16px 18px; display:grid; gap:12px; }
+  .proyecto.entregado { border-color:var(--ok); }
+  .p-top { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  .p-cliente { font-family:var(--serif); font-size:18px; }
+  .p-desc { color:var(--muted); font-size:13px; }
+  .p-pct { margin-left:auto; font-family:var(--serif); font-size:24px; }
+  .barra { height:7px; background:var(--surface-2); border-radius:99px; overflow:hidden; }
+  .barra i { display:block; height:100%; background:var(--accent); border-radius:99px;
+             transition:width .3s ease; }
+  .proyecto.entregado .barra i { background:var(--ok); }
+  .p-ctrl { display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+  .p-ctrl label { flex:1 1 170px; }
+  .p-meta { font-size:12px; color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; }
+  .chip { display:inline-block; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+          background:var(--accent-wash); color:var(--accent-deep); border-radius:99px; padding:3px 10px; }
+  .chip.atrasado { background:#F6E3E2; color:var(--crit); }
+  :root[data-theme="dark"] .chip.atrasado, :root:not([data-theme="light"]) .chip.atrasado { background:#3A2624; }
+
+  .vacio { text-align:center; color:var(--muted); padding:38px 20px;
+           border:1px dashed var(--line); border-radius:var(--r); }
+  .cargando { color:var(--muted); font-size:14px; padding:26px 0; }
+  .aviso-solo-lectura { background:var(--surface-2); border-radius:8px; padding:11px 14px;
+                        font-size:13px; color:var(--muted); margin-bottom:16px; }
+  .toast { position:fixed; left:50%; transform:translateX(-50%);
+           bottom:calc(env(safe-area-inset-bottom, 0px) + 22px); z-index:50;
+           background:var(--ink); color:var(--ground); padding:10px 18px; border-radius:99px;
+           box-shadow:var(--shadow); font-size:14px; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+
+<header>
+  <div class="head-in">
+    <div>
+      <div class="marca">Taller <span>Amphora</span></div>
+      <div class="sub">Bosque y Cielo</div>
+    </div>
+    <div class="quien" id="quien"></div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-cotizador" role="tab" aria-selected="true" aria-controls="vista-cotizador">Cotizador</button>
+    <button class="tab" id="tab-produccion" role="tab" aria-selected="false" aria-controls="vista-produccion">Producción</button>
+  </div>
+</header>
+
+<main>
+  <!-- ══ COTIZADOR ══════════════════════════════════════ -->
+  <section id="vista-cotizador" role="tabpanel" aria-labelledby="tab-cotizador">
+    <div class="cotiza">
+      <div>
+        <div class="panel">
+          <h2>La pieza</h2>
+          <p class="pista">El tamaño va por peso: XS y S son piezas pequeñas, M una taza o un plato de 27 cm, L una jarra de 2 kg, XL una matera de 4 kg o más.</p>
+
+          <label class="campo" for="f-producto">
+            <span>Producto</span>
+            <input type="text" id="f-producto" placeholder="Taza cónica 250 ml" autocomplete="off">
+          </label>
+
+          <div class="fila">
+            <label class="campo" for="f-cantidad">
+              <span>Cantidad</span>
+              <input type="number" id="f-cantidad" min="1" step="1" value="50" class="num">
+            </label>
+            <label class="campo" for="f-cliente">
+              <span>Cliente (opcional)</span>
+              <input type="text" id="f-cliente" placeholder="Café del Valle" autocomplete="off">
+            </label>
+          </div>
+
+          <div class="campo">
+            <span>Tamaño</span>
+            <div class="segmented" id="f-tamano"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>La decoración</h2>
+          <p class="pista">De esto sale la dificultad del acabado, y con ella los minutos de trabajo. La regla es la del Discovery: cuánta superficie se pinta y con cuántas tintas.</p>
+
+          <label class="campo" for="f-pintado">
+            <span>Superficie pintada — <b id="f-pintado-val" class="num">50%</b></span>
+            <input type="range" id="f-pintado" min="0" max="100" step="5" value="50">
+          </label>
+
+          <div class="fila">
+            <label class="campo" for="f-tintas">
+              <span>Número de tintas</span>
+              <input type="number" id="f-tintas" min="0" max="12" step="1" value="2" class="num">
+            </label>
+            <label class="campo" for="f-relieve" style="display:flex; align-items:center; gap:9px; flex:1 1 220px;">
+              <input type="checkbox" id="f-relieve" style="width:auto;">
+              <span style="margin:0; text-transform:none; letter-spacing:0; font-size:14px; color:var(--ink);">La pintura va solo sobre el relieve</span>
+            </label>
+          </div>
+
+          <div class="grado" id="f-grado">Acabado medio</div>
+        </div>
+      </div>
+
+      <!-- Resultado -->
+      <div class="resultado">
+        <div class="panel">
+          <h2>Precio sugerido</h2>
+          <p class="pista" id="r-contexto">&nbsp;</p>
+          <div class="precio num" id="r-precio">—</div>
+          <div class="precio-nota" id="r-nota"></div>
+
+          <ul class="desglose" id="r-desglose"></ul>
+
+          <div class="avisos" id="r-avisos"></div>
+
+          <div class="acciones">
+            <button class="btn" id="b-pdf">Descargar PDF</button>
+            <button class="btn sec" id="b-guardar">Guardar cotización</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PRODUCCIÓN ═════════════════════════════════════ -->
+  <section id="vista-produccion" role="tabpanel" aria-labelledby="tab-produccion" hidden>
+    <div id="prod-lectura"></div>
+    <div class="panel" style="margin-bottom:18px;">
+      <h2>Nuevo proyecto</h2>
+      <p class="pista">Lo mismo que se registra por Telegram. El avance sale de dos datos: en qué etapa va y cuántas piezas ya la pasaron.</p>
+      <div class="fila">
+        <label class="campo" for="n-cliente"><span>Cliente</span><input type="text" id="n-cliente" autocomplete="off"></label>
+        <label class="campo" for="n-desc"><span>Qué se está haciendo</span><input type="text" id="n-desc" placeholder="50 tazas cónicas, logo grabado" autocomplete="off"></label>
+      </div>
+      <div class="fila">
+        <label class="campo" for="n-cantidad"><span>Piezas</span><input type="number" id="n-cantidad" min="1" step="1" value="50" class="num"></label>
+        <label class="campo" for="n-proceso"><span>Proceso</span>
+          <select id="n-proceso">
+            <option value="bizcocho">Bizcocho (el habitual)</option>
+            <option value="clasico">Clásico (modelando en casa)</option>
+          </select>
+        </label>
+        <label class="campo" for="n-entrega"><span>Entrega</span><input type="date" id="n-entrega"></label>
+      </div>
+      <button class="btn" id="b-nuevo">Agregar proyecto</button>
+    </div>
+
+    <div class="proyectos" id="lista-proyectos">
+      <div class="cargando">Cargando proyectos…</div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ───────────────────────────────────────────────────────────────────
+  // Parámetros de respaldo. Los de verdad viven en la base de la página
+  // (documento config/parametros) y los mantiene Claude sincronizados con
+  // la hoja "Cotizador Interno". Estos son el espejo del 2026-09-17, para
+  // que la página funcione aunque no haya base disponible.
+  // ───────────────────────────────────────────────────────────────────
+  var PARAMS = {
+    salario_mensual: 4000000, horas_semanales: 48, semanas_mes: 4,
+    volumen_referencia: 150, gastos_admin_mes: 1230000,
+    arriendo_mes: 3200000, servicios_mes: 1000000,
+    pct_uso_local: 20, pct_uso_servicios: 70,
+    desperdicio_pct: 10, mercadeo_pct: 5, margen_pct: 40,
+    margen_modo: "markup", iva_pct: 19,
+    costo_bizcocho: 4500, costo_esmaltes: 0, oz_esmalte_por_pieza: 0,
+    precio_oz_esmalte: 2031.25, costo_vinilo: 0, costo_empaque: 0,
+    costo_quema: 0, minutos_otros_pasos: 0
+  };
+
+  // Minutos por pieza. Solo el acabado está medido (Discovery 2026-09).
+  var TIEMPOS = {
+    "Preparación del bizcocho": { XS:{}, S:{}, M:{}, L:{}, XL:{} },
+    "Acabado": {
+      XS:{facil:4.0, medio:10.0, dificil:20.0},
+      S: {facil:6.5, medio:12.6, dificil:23.0},
+      M: {facil:9.5, medio:14.7, dificil:23.0},
+      L: {medio:18.3, dificil:26.2},
+      XL:{medio:26.0}
+    },
+    "Terminado y empaque": { XS:{}, S:{}, M:{}, L:{}, XL:{} }
+  };
+
+  var TAMANOS = [
+    {id:"XS", nota:"muy pequeña"}, {id:"S", nota:"0,65 kg"},
+    {id:"M", nota:"1,2 kg"}, {id:"L", nota:"2 kg"}, {id:"XL", nota:"4 kg +"}
+  ];
+
+  var ETAPAS = {
+    bizcocho: ["esmaltado inicial","pintar bizcocho","primera quema","acabado","empaque","entregado"],
+    clasico:  ["modelado","secado","primera quema","esmaltado","segunda quema","acabado","empaque","entregado"]
+  };
+
+  // ── Estado ────────────────────────────────────────────────────────
+  var entrada = { producto:"", cliente:"", cantidad:50, tamano:"M", pintado:50, tintas:2, relieve:false };
+  var ultimo = null;          // último cálculo
+  var db = null, downloads = null, user = null;
+  var puedeEscribir = null;   // null = todavía no sabemos
+  var proyectos = [];
+  var nombres = {};
+
+  // ── Utilidades ────────────────────────────────────────────────────
+  function $(id) { return document.getElementById(id); }
+  function pesos(n) {
+    var v = Math.round(Number(n) || 0);
+    return "$" + v.toLocaleString("es-CO").replace(/,/g, ".");
+  }
+  function toast(texto) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.textContent = texto; t.setAttribute("role","status");
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3200);
+  }
+  function hoyISO() { return new Date().toISOString().slice(0, 10); }
+  function fechaCorta(iso) {
+    if (!iso) return "";
+    var p = String(iso).slice(0, 10).split("-");
+    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
+  }
+
+  // ───────────────────────────────────────────────────────────────────
+  // EL CÁLCULO. Misma cadena que execution/cotizador.py: si se cambia una,
+  // hay que cambiar la otra o la página y el bot darán precios distintos.
+  // ───────────────────────────────────────────────────────────────────
+  function gradoAcabado(pctPintado, tintas, soloRelieve) {
+    var p = pctPintado >= 60 ? 2 : (pctPintado >= 30 ? 1 : 0);
+    p += tintas >= 4 ? 2 : (tintas >= 2 ? 1 : 0);
+    if (soloRelieve) p -= 1;
+    return p <= 1 ? "facil" : (p <= 3 ? "medio" : "dificil");
+  }
+
+  function calcular(e) {
+    var P = PARAMS, avisos = [], dificultad = gradoAcabado(e.pintado, e.tintas, e.relieve);
+
+    // Tiempo: se suman las etapas que tengan el dato de ese tamaño
+    var minAcabado = (TIEMPOS["Acabado"][e.tamano] || {})[dificultad];
+    if (minAcabado == null) {
+      return { error: "Todavía no está medido el acabado de una pieza " + e.tamano +
+                      " con dificultad " + dificultad + ". Ese tiempo hay que cronometrarlo en el taller." };
+    }
+    var porEtapa = { "Acabado": minAcabado }, sinMedir = [];
+    ["Preparación del bizcocho", "Terminado y empaque"].forEach(function (etapa) {
+      var v = (TIEMPOS[etapa][e.tamano] || {})[dificultad];
+      if (v == null) sinMedir.push(etapa.toLowerCase()); else porEtapa[etapa] = v;
+    });
+    if (sinMedir.length && Number(P.minutos_otros_pasos) > 0) {
+      porEtapa["Otros pasos (a ojo)"] = Number(P.minutos_otros_pasos);
+      sinMedir = [];
+    }
+    if (sinMedir.length) {
+      avisos.push({ texto: "Sin medir: " + sinMedir.join(" y ") + ". Solo se está cobrando el acabado, " +
+                           "así que el tiempo real por pieza es mayor." });
+    }
+    var minutos = Object.keys(porEtapa).reduce(function (s, k) { return s + porEtapa[k]; }, 0);
+
+    // Mano de obra
+    var horasMes = Number(P.horas_semanales) * Number(P.semanas_mes);
+    var valorHora = horasMes ? Number(P.salario_mensual) / horasMes : 0;
+    var manoObra = (minutos / 60) * valorHora;
+
+    // Materiales: el esmalte se carga en onzas cuando están puestas
+    var onzas = Number(P.oz_esmalte_por_pieza) || 0;
+    var esmaltes = onzas ? onzas * Number(P.precio_oz_esmalte) : Number(P.costo_esmaltes) || 0;
+    var materiales = (Number(P.costo_bizcocho) || 0) + esmaltes + (Number(P.costo_vinilo) || 0);
+
+    var faltan = [];
+    if (!Number(P.costo_bizcocho)) faltan.push("bizcocho");
+    if (!esmaltes) faltan.push("esmaltes");
+    if (!Number(P.costo_empaque)) faltan.push("empaque");
+    if (faltan.length) {
+      avisos.push({ duro:true, texto:"Sin costo cargado: " + faltan.join(", ") +
+                    ". El precio sale por debajo del real." });
+    }
+
+    var quema = Number(P.costo_quema) || 0;          // va en 0: su energía está en servicios
+    var empaque = Number(P.costo_empaque) || 0;
+    var directo = materiales + manoObra + quema + empaque;
+    var desperdicio = directo * Number(P.desperdicio_pct) / 100;
+    var directoTotal = directo + desperdicio;
+
+    var volumen = Number(P.volumen_referencia) || 1;
+    var mercadeo = directoTotal * Number(P.mercadeo_pct) / 100;
+    var locativos = (Number(P.arriendo_mes) * Number(P.pct_uso_local) / 100) +
+                    (Number(P.servicios_mes) * Number(P.pct_uso_servicios) / 100);
+    var arriendo = locativos / volumen;
+    var admin = Number(P.gastos_admin_mes) / volumen;
+    var granTotal = directoTotal + mercadeo + arriendo + admin;
+
+    if (e.cantidad < volumen * 0.2) {
+      avisos.push({ texto:"El pedido (" + e.cantidad + " piezas) es chico frente a las " + volumen +
+                    " piezas al mes entre las que se reparten los fijos. Este precio solo se sostiene " +
+                    "si el mes se llena con otros pedidos." });
+    }
+
+    var margen = Number(P.margen_pct) / 100;
+    var pvp = String(P.margen_modo).toLowerCase() === "sobre_venta"
+      ? granTotal / (1 - margen) : granTotal * (1 + margen);
+    var iva = pvp * Number(P.iva_pct) / 100;
+
+    return {
+      producto:e.producto, cliente:e.cliente, cantidad:e.cantidad,
+      tamano:e.tamano, dificultad:dificultad,
+      minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa, valorHora:valorHora,
+      lineas: [
+        ["Materiales", materiales], ["Mano de obra", manoObra],
+        ["Quema del esmalte", quema], ["Empaque", empaque],
+        ["Desperdicio", desperdicio], ["Mercadeo", mercadeo],
+        ["Arriendo y servicios", arriendo], ["Administración", admin]
+      ],
+      granTotal:granTotal, margen:pvp - granTotal, pvp:pvp, iva:iva,
+      conIva:pvp + iva, totalPedido:pvp * e.cantidad, totalPedidoIva:(pvp + iva) * e.cantidad,
+      volumen:volumen, avisos:avisos
+    };
+  }
+
+  // ── Render del cotizador ──────────────────────────────────────────
+  function pintarTamanos() {
+    var cont = $("f-tamano");
+    cont.innerHTML = "";
+    TAMANOS.forEach(function (t) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "seg";
+      b.setAttribute("aria-pressed", String(entrada.tamano === t.id));
+      b.innerHTML = t.id + "<small>" + t.nota + "</small>";
+      b.addEventListener("click", function () {
+        entrada.tamano = t.id; pintarTamanos(); refrescar();
+      });
+      cont.appendChild(b);
+    });
+  }
+
+  function refrescar() {
+    entrada.producto = $("f-producto").value.trim();
+    entrada.cliente = $("f-cliente").value.trim();
+    entrada.cantidad = Math.max(1, parseInt($("f-cantidad").value, 10) || 1);
+    entrada.pintado = parseInt($("f-pintado").value, 10);
+    entrada.tintas = Math.max(0, parseInt($("f-tintas").value, 10) || 0);
+    entrada.relieve = $("f-relieve").checked;
+
+    $("f-pintado-val").textContent = entrada.pintado + "%";
+    var g = gradoAcabado(entrada.pintado, entrada.tintas, entrada.relieve);
+    $("f-grado").textContent = "Acabado " + (g === "facil" ? "fácil" : g === "medio" ? "medio" : "difícil");
+
+    var r = calcular(entrada);
+    var avisos = $("r-avisos"), desglose = $("r-desglose");
+    avisos.innerHTML = ""; desglose.innerHTML = "";
+
+    if (r.error) {
+      ultimo = null;
+      $("r-precio").textContent = "—";
+      $("r-nota").textContent = "";
+      $("r-contexto").innerHTML = "&nbsp;";
+      avisos.appendChild(aviso({ duro:true, texto:r.error }));
+      $("b-pdf").disabled = true; $("b-guardar").disabled = true;
+      return;
+    }
+
+    ultimo = r;
+    $("b-pdf").disabled = false;
+    $("b-guardar").disabled = puedeEscribir === false;
+
+    $("r-contexto").textContent = (r.producto || "Pieza") + " · " + r.tamano + " · " +
+      r.minutos + " min por pieza";
+    $("r-precio").textContent = pesos(r.pvp);
+    $("r-nota").textContent = "por pieza, sin IVA · " + pesos(r.conIva) + " con IVA · pedido de " +
+      r.cantidad + ": " + pesos(r.totalPedido);
+
+    r.lineas.forEach(function (l) {
+      if (!l[1]) return;
+      desglose.appendChild(linea(l[0], pesos(l[1])));
+    });
+    desglose.appendChild(linea("Costo + gastos", pesos(r.granTotal)));
+    desglose.appendChild(linea("Margen", pesos(r.margen)));
+    var t = linea("PVP por pieza", pesos(r.pvp)); t.className = "total";
+    desglose.appendChild(t);
+
+    r.avisos.forEach(function (a) { avisos.appendChild(aviso(a)); });
+  }
+
+  function linea(etiqueta, valor) {
+    var li = document.createElement("li");
+    var a = document.createElement("span"); a.textContent = etiqueta;
+    var b = document.createElement("span"); b.className = "num"; b.textContent = valor;
+    li.appendChild(a); li.appendChild(b);
+    return li;
+  }
+
+  function aviso(a) {
+    var d = document.createElement("div");
+    d.className = "aviso" + (a.duro ? " duro" : "");
+    d.textContent = a.texto;
+    return d;
+  }
+
+  // ── PDF ───────────────────────────────────────────────────────────
+  function generarPDF(r) {
+    var jsPDF = (window.jspdf || {}).jsPDF;
+    if (!jsPDF) { toast("No se pudo cargar el generador de PDF"); return null; }
+    var doc = new jsPDF({ unit:"pt", format:"a4" });
+    var W = doc.internal.pageSize.getWidth(), M = 42, x2 = W - M;
+    var numero = "BYC-" + String(Date.now()).slice(-6);
+
+    // Cabecera
+    doc.setFillColor(192, 112, 130); doc.rect(0, 0, W, 96, "F");
+    doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(24);
+    doc.text("Bosque y Cielo", M, 46);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("CERÁMICA ARTESANAL", M, 62);
+    doc.setFontSize(8.5);
+    ["www.bosqueycielo.com", "KR 34 # 5B-61 LC 103 · Cali, Valle",
+     "Cel: 310 492 5416 · NIT: 901.481.694-2"].forEach(function (t, i) {
+      doc.text(t, x2, 36 + i * 13, { align:"right" });
+    });
+
+    // Barra de título
+    doc.setFillColor(240, 232, 229); doc.rect(0, 96, W, 52, "F");
+    doc.setTextColor(46, 33, 31); doc.setFont("times", "normal"); doc.setFontSize(19);
+    doc.text("Cotización", M, 128);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(138, 116, 112);
+    doc.text("N° COTIZACIÓN", x2 - 110, 118); doc.text("FECHA", x2, 118, { align:"right" });
+    doc.setFontSize(10); doc.setTextColor(154, 78, 96);
+    doc.text(numero, x2 - 110, 132);
+    doc.text(fechaCorta(hoyISO()), x2, 132, { align:"right" });
+
+    var y = 184;
+    doc.setTextColor(46, 33, 31); doc.setFont("times", "normal"); doc.setFontSize(12);
+    doc.text(r.cliente ? "Para " + r.cliente : "Cotización interna", M, y);
+    y += 22;
+
+    // Tabla
+    doc.setFillColor(192, 112, 130); doc.rect(M, y, x2 - M, 22, "F");
+    doc.setTextColor(255); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+    doc.text("PRODUCTO", M + 10, y + 14);
+    doc.text("CANT.", M + 300, y + 14, { align:"right" });
+    doc.text("P. UNITARIO", M + 390, y + 14, { align:"right" });
+    doc.text("TOTAL", x2 - 10, y + 14, { align:"right" });
+    y += 22;
+
+    doc.setTextColor(46, 33, 31); doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text(r.producto || "Pieza en cerámica", M + 10, y + 20);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(138, 116, 112);
+    doc.text("Tamaño " + r.tamano + " · acabado " + r.dificultad, M + 10, y + 33);
+    doc.setFontSize(10); doc.setTextColor(46, 33, 31);
+    doc.text(String(r.cantidad), M + 300, y + 20, { align:"right" });
+    doc.text(pesos(r.pvp), M + 390, y + 20, { align:"right" });
+    doc.setFont("helvetica", "bold");
+    doc.text(pesos(r.totalPedido), x2 - 10, y + 20, { align:"right" });
+    y += 46;
+    doc.setDrawColor(232, 220, 216); doc.line(M, y, x2, y);
+    y += 16;
+
+    // Totales
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(138, 116, 112);
+    doc.text("IVA (19%)", M + 390, y, { align:"right" });
+    doc.setTextColor(46, 33, 31);
+    doc.text(pesos(r.iva * r.cantidad), x2 - 10, y, { align:"right" });
+    y += 22;
+
+    doc.setFillColor(192, 112, 130); doc.rect(M, y, x2 - M, 34, "F");
+    doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(14);
+    doc.text("TOTAL", M + 10, y + 22);
+    doc.text(pesos(r.totalPedidoIva), x2 - 10, y + 22, { align:"right" });
+    y += 58;
+
+    // Condiciones
+    doc.setTextColor(138, 116, 112); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("CONDICIONES DE PAGO", M, y);
+    doc.setTextColor(46, 33, 31); doc.setFontSize(10);
+    doc.text("50% anticipo · 50% contra entrega", M, y + 14);
+    doc.setTextColor(138, 116, 112); doc.setFontSize(8);
+    doc.text("PLAZO DE ENTREGA", M + 280, y);
+    doc.setTextColor(46, 33, 31); doc.setFontSize(10);
+    doc.text("4-6 semanas hábiles", M + 280, y + 14);
+
+    // Pie
+    var yPie = doc.internal.pageSize.getHeight() - 56;
+    doc.setDrawColor(232, 220, 216); doc.line(M, yPie - 16, x2, yPie - 16);
+    doc.setFont("times", "italic"); doc.setFontSize(10); doc.setTextColor(192, 112, 130);
+    doc.text("Cada pieza es única, hecha a mano con amor.", W / 2, yPie, { align:"center" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(138, 116, 112);
+    doc.text("Precios en pesos colombianos (COP) · hola@bosqueycielo.com · 310 492 5416",
+             W / 2, yPie + 14, { align:"center" });
+
+    return { doc:doc, numero:numero };
+  }
+
+  // ── Producción ────────────────────────────────────────────────────
+  function etapasDe(p) { return ETAPAS[p.proceso] || ETAPAS.bizcocho; }
+
+  function avance(p) {
+    var etapas = etapasDe(p), i = etapas.indexOf(p.etapa);
+    if (i < 0) i = 0;
+    if (p.etapa === "entregado") return 1;
+    var frac = p.cantidad > 0 ? Math.min(1, (Number(p.piezas_listas) || 0) / p.cantidad) : 0;
+    return Math.min(1, (i + frac) / (etapas.length - 1));
+  }
+
+  function pintarProyectos() {
+    var cont = $("lista-proyectos");
+    cont.innerHTML = "";
+    if (!proyectos.length) {
+      cont.innerHTML = '<div class="vacio">Todavía no hay proyectos. Agrega el primero arriba, ' +
+                       'o regístralo por Telegram y aparecerá acá.</div>';
+      return;
+    }
+    var orden = proyectos.slice().sort(function (a, b) {
+      if ((a.etapa === "entregado") !== (b.etapa === "entregado")) return a.etapa === "entregado" ? 1 : -1;
+      return String(a.fecha_entrega || "9999").localeCompare(String(b.fecha_entrega || "9999"));
+    });
+    orden.forEach(function (p) { cont.appendChild(tarjetaProyecto(p)); });
+  }
+
+  function tarjetaProyecto(p) {
+    var etapas = etapasDe(p), pct = Math.round(avance(p) * 100);
+    var card = document.createElement("div");
+    card.className = "proyecto" + (p.etapa === "entregado" ? " entregado" : "");
+
+    var top = document.createElement("div"); top.className = "p-top";
+    var izq = document.createElement("div");
+    var cli = document.createElement("div"); cli.className = "p-cliente"; cli.textContent = p.cliente || "Sin cliente";
+    var des = document.createElement("div"); des.className = "p-desc"; des.textContent = p.descripcion || "";
+    izq.appendChild(cli); izq.appendChild(des);
+    var num = document.createElement("div"); num.className = "p-pct num"; num.textContent = pct + "%";
+    top.appendChild(izq); top.appendChild(num);
+    card.appendChild(top);
+
+    var barra = document.createElement("div"); barra.className = "barra";
+    var i = document.createElement("i"); i.style.width = pct + "%"; barra.appendChild(i);
+    card.appendChild(barra);
+
+    var ctrl = document.createElement("div"); ctrl.className = "p-ctrl";
+
+    var lEtapa = document.createElement("label"); lEtapa.className = "campo"; lEtapa.style.marginBottom = "0";
+    lEtapa.innerHTML = "<span>Etapa</span>";
+    var sel = document.createElement("select");
+    sel.id = "etapa-" + p.id;
+    etapas.forEach(function (e) {
+      var o = document.createElement("option"); o.value = e; o.textContent = e;
+      if (e === p.etapa) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.disabled = puedeEscribir === false;
+    sel.addEventListener("change", function () {
+      guardarProyecto(p.id, { etapa:sel.value, piezas_listas: sel.value === "entregado" ? p.cantidad : 0 });
+    });
+    lEtapa.appendChild(sel); ctrl.appendChild(lEtapa);
+
+    var lPiezas = document.createElement("label"); lPiezas.className = "campo"; lPiezas.style.marginBottom = "0";
+    lPiezas.innerHTML = "<span>Piezas que ya pasaron esta etapa</span>";
+    var inp = document.createElement("input");
+    inp.type = "number"; inp.min = "0"; inp.max = String(p.cantidad); inp.className = "num";
+    inp.id = "piezas-" + p.id;
+    inp.value = Number(p.piezas_listas) || 0;
+    inp.disabled = puedeEscribir === false;
+    inp.addEventListener("change", function () {
+      var v = Math.max(0, Math.min(p.cantidad, parseInt(inp.value, 10) || 0));
+      inp.value = v;
+      guardarProyecto(p.id, { piezas_listas:v });
+    });
+    lPiezas.appendChild(inp); ctrl.appendChild(lPiezas);
+    card.appendChild(ctrl);
+
+    var meta = document.createElement("div"); meta.className = "p-meta";
+    var chip = document.createElement("span"); chip.className = "chip";
+    chip.textContent = p.cantidad + " piezas";
+    meta.appendChild(chip);
+    if (p.fecha_entrega) {
+      var atrasado = p.etapa !== "entregado" && p.fecha_entrega < hoyISO();
+      var c2 = document.createElement("span");
+      c2.className = "chip" + (atrasado ? " atrasado" : "");
+      c2.textContent = (atrasado ? "venció " : "entrega ") + fechaCorta(p.fecha_entrega);
+      meta.appendChild(c2);
+    }
+    if (p.actualizado_por) {
+      var q = document.createElement("span");
+      q.textContent = "último toque: " + (nombres[p.actualizado_por] || "alguien del equipo");
+      meta.appendChild(q);
+    }
+    card.appendChild(meta);
+    return card;
+  }
+
+  function guardarProyecto(id, cambios) {
+    var local = proyectos.filter(function (p) { return p.id === id; })[0];
+    if (local) { Object.keys(cambios).forEach(function (k) { local[k] = cambios[k]; }); pintarProyectos(); }
+    if (!db) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+    cambios.actualizado_en = new Date().toISOString();
+    if (user && user._id) cambios.actualizado_por = user._id;
+    db.doc("proyectos/" + id).update(cambios).catch(function (e) {
+      if (e && e.code === "invalid_argument") {
+        puedeEscribir = false; pintarProyectos();
+        toast("No tienes permiso para cambiar los proyectos");
+      } else {
+        toast("No se pudo guardar el cambio");
+      }
+    });
+  }
+
+  // ── Arranque ──────────────────────────────────────────────────────
+  function conectarFormulario() {
+    ["f-producto","f-cliente","f-cantidad","f-pintado","f-tintas","f-relieve"].forEach(function (id) {
+      var el = $(id);
+      el.addEventListener("input", refrescar);
+      el.addEventListener("change", refrescar);
+    });
+
+    $("b-pdf").addEventListener("click", function () {
+      if (!ultimo) return;
+      var salida = generarPDF(ultimo);
+      if (!salida) return;
+      var nombre = "Cotizacion_" + salida.numero +
+        (ultimo.cliente ? "_" + ultimo.cliente.replace(/[^A-Za-z0-9]+/g, "_") : "") + ".pdf";
+      if (downloads) {
+        downloads.save({ filename:nombre, data:salida.doc.output("arraybuffer") })
+          .then(function () { toast("PDF listo"); })
+          .catch(function () { toast("La descarga no se completó"); });
+      } else {
+        salida.doc.save(nombre);   // fuera del visor de Claude sí funciona
+        toast("Si no se descargó, ábrela en Claude para bajar el PDF");
+      }
+    });
+
+    $("b-guardar").addEventListener("click", function () {
+      if (!ultimo) return;
+      if (!db) { toast("No hay conexión con la base: la cotización no se guardó"); return; }
+      var doc = {
+        fecha: hoyISO(), producto: ultimo.producto, cliente: ultimo.cliente,
+        cantidad: ultimo.cantidad, tamano: ultimo.tamano, dificultad: ultimo.dificultad,
+        minutos: ultimo.minutos, pvp: Math.round(ultimo.pvp),
+        con_iva: Math.round(ultimo.conIva), total_pedido: Math.round(ultimo.totalPedido),
+        costo_gastos: Math.round(ultimo.granTotal),
+        creado_en: new Date().toISOString()
+      };
+      if (user && user._id) doc.creado_por = user._id;
+      db.collection("cotizaciones").add(doc)
+        .then(function () { toast("Cotización guardada"); })
+        .catch(function (e) {
+          if (e && e.code === "invalid_argument") {
+            puedeEscribir = false; $("b-guardar").disabled = true;
+            toast("No tienes permiso para guardar cotizaciones");
+          } else { toast("No se pudo guardar"); }
+        });
+    });
+
+    $("b-nuevo").addEventListener("click", function () {
+      var cliente = $("n-cliente").value.trim();
+      var desc = $("n-desc").value.trim();
+      if (!cliente && !desc) { toast("Ponle al menos un cliente o una descripción"); return; }
+      var nuevo = {
+        cliente: cliente, descripcion: desc,
+        cantidad: Math.max(1, parseInt($("n-cantidad").value, 10) || 1),
+        proceso: $("n-proceso").value,
+        fecha_entrega: $("n-entrega").value || "",
+        etapa: (ETAPAS[$("n-proceso").value] || ETAPAS.bizcocho)[0],
+        piezas_listas: 0,
+        creado_en: new Date().toISOString(),
+        actualizado_en: new Date().toISOString()
+      };
+      if (user && user._id) nuevo.actualizado_por = user._id;
+      if (!db) {
+        nuevo.id = "local-" + Date.now();
+        proyectos.push(nuevo); pintarProyectos();
+        toast("Guardado solo en esta pantalla: no hay conexión con la base");
+        return;
+      }
+      db.collection("proyectos").add(nuevo).then(function () {
+        $("n-cliente").value = ""; $("n-desc").value = "";
+        toast("Proyecto agregado");
+      }).catch(function (e) {
+        if (e && e.code === "invalid_argument") {
+          puedeEscribir = false; pintarProyectos();
+          toast("No tienes permiso para agregar proyectos");
+        } else { toast("No se pudo agregar"); }
+      });
+    });
+
+    // Pestañas
+    [["tab-cotizador","vista-cotizador"], ["tab-produccion","vista-produccion"]].forEach(function (par, i, todos) {
+      $(par[0]).addEventListener("click", function () {
+        todos.forEach(function (p) {
+          var activa = p[0] === par[0];
+          $(p[0]).setAttribute("aria-selected", String(activa));
+          $(p[1]).hidden = !activa;
+        });
+        try { localStorage.setItem("amphora-tab", par[0]); } catch (e) {}
+      });
+    });
+    try {
+      var guardada = localStorage.getItem("amphora-tab");
+      if (guardada === "tab-produccion") $("tab-produccion").click();
+    } catch (e) {}
+  }
+
+  function conectarCapacidades() {
+    if (!window.claude || !window.claude.use) return;
+
+    window.claude.use("downloads").then(function (d) { downloads = d; }).catch(function () {});
+
+    window.claude.use("user").then(function (u) {
+      if (!u) return;
+      user = u;
+      Promise.resolve(u.can ? u.can("data.write") : null).then(function (puede) {
+        if (puede === false) {
+          puedeEscribir = false;
+          $("prod-lectura").innerHTML = '<div class="aviso-solo-lectura">Estás viendo el tablero en modo lectura: ' +
+            'para cambiar avances necesitas permiso de edición en esta página.</div>';
+          $("b-guardar").disabled = true;
+          pintarProyectos();
+        } else if (puede === true) { puedeEscribir = true; }
+      }).catch(function () {});
+      Promise.resolve(u.id ? u.id() : null).then(function (id) { if (id) user._id = id; }).catch(function () {});
+      Promise.resolve(u.me ? u.me() : null).then(function (yo) {
+        if (yo && yo.name) $("quien").textContent = "Hola, " + yo.name.split(" ")[0];
+      }).catch(function () {});
+    }).catch(function () {});
+
+    window.claude.use("db").then(function (d) {
+      if (!d) { pintarProyectos(); return; }
+      db = d;
+
+      d.doc("config/parametros").onSnapshot(function (snap) {
+        if (snap.exists) {
+          var datos = snap.data() || {};
+          Object.keys(datos).forEach(function (k) {
+            if (k in PARAMS && datos[k] !== null && datos[k] !== "") PARAMS[k] = datos[k];
+          });
+          refrescar();
+        }
+      }, function () {});
+
+      d.doc("config/tiempos").onSnapshot(function (snap) {
+        if (snap.exists) {
+          var datos = snap.data() || {};
+          Object.keys(TIEMPOS).forEach(function (etapa) {
+            if (datos[etapa]) TIEMPOS[etapa] = datos[etapa];
+          });
+          refrescar();
+        }
+      }, function () {});
+
+      d.collection("proyectos").limit(200).onSnapshot(function (snap) {
+        proyectos = snap.docs.map(function (doc) {
+          var body = doc.data() || {};
+          body.id = doc.id;
+          return body;
+        });
+        pintarProyectos();
+        var ids = proyectos.map(function (p) { return p.actualizado_por; })
+                           .filter(function (x) { return !!x; });
+        if (ids.length && user && user.profiles) {
+          user.profiles(ids).then(function (ps) {
+            Object.keys(ps || {}).forEach(function (id) {
+              nombres[id] = (ps[id] && ps[id].name) || "";
+            });
+            pintarProyectos();
+          }).catch(function () {});
+        }
+      }, function () {
+        $("lista-proyectos").innerHTML = '<div class="vacio">No se pudieron cargar los proyectos.</div>';
+      });
+    }).catch(function () { pintarProyectos(); });
+  }
+
+  pintarTamanos();
+  conectarFormulario();
+  refrescar();
+  conectarCapacidades();
+  setTimeout(function () {
+    if (!db && !proyectos.length) pintarProyectos();
+  }, 11000);
+})();
+</script>
