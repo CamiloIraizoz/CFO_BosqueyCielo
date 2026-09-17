@@ -46,12 +46,12 @@ por hornada y se saca ese valor de servicios públicos.
 Por eso `pct_uso_servicios` está en **70%** (decisión de Camilo, 2026-09-17), muy por
 encima del 20% del arriendo: el arriendo se reparte por metros cuadrados, pero la
 energía la consumen los hornos. Con eso los fijos locativos quedan en $1.340.000/mes,
-o **$4.467 por pieza** sobre 300 piezas/mes.
+o **$8.933 por pieza** sobre 150 piezas/mes.
 
 ## Dos decisiones de negocio (2026-09-17, con Camilo)
 
-**1. Los fijos se reparten entre 300 piezas/mes, no entre el pedido.**
-300 es la producción real del taller. Si los fijos se repartieran entre las piezas del
+**1. Los fijos se reparten entre 150 piezas/mes, no entre el pedido.**
+150 es la producción real del taller (Camilo, 2026-09-17). Si los fijos se repartieran entre las piezas del
 pedido, uno de 30 piezas cargaría $69.000 de fijos por pieza y el precio sería
 imposible de vender. La contrapartida: un pedido chico solo se sostiene si el mes se
 llena con otro trabajo — por eso el cotizador avisa cuando el pedido es menor al 20%

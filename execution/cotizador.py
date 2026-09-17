@@ -20,7 +20,7 @@ Replica la cadena de costeo de la hoja "Cotizador Interno":
 
 Dos decisiones tomadas con Camilo el 2026-09-17:
 
- 1. Los costos fijos se reparten entre un VOLUMEN DE REFERENCIA fijo (300
+ 1. Los costos fijos se reparten entre un VOLUMEN DE REFERENCIA fijo (150
     piezas/mes, la producción real del taller), no entre las piezas del pedido.
     Si se repartieran entre el pedido, uno de 30 piezas cargaría $69.000 de fijos
     por pieza y el precio saldría absurdo. El volumen es un parámetro editable:
@@ -58,7 +58,7 @@ PARAMS_DEFECTO = {
     "horas_semanales":        48,
     "semanas_mes":            4,
     # Reparto de fijos
-    "volumen_referencia":     300,        # piezas/mes — producción real (Camilo, 2026-09-17)
+    "volumen_referencia":     150,        # piezas/mes — producción real (Camilo, 2026-09-17)
     "gastos_admin_mes":       1_230_000,  # contador 10% + gerente 20% + supervisor 30%
     "arriendo_mes":           3_200_000,
     "servicios_mes":          1_000_000,  # incluye la energía de las quemas

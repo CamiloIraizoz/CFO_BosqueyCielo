@@ -655,7 +655,7 @@ REGLAS:
 - Si no hay tiempo medido para ese tamaño y dificultad (L fácil, XL fácil, XL difícil),
   el script avisa: pídele al usuario los minutos y pásalos en minutos_acabado.
 - El precio es SUGERIDO. La decisión de cobrar más o menos es de Camilo.
-- Los fijos se reparten entre 300 piezas/mes, no entre el pedido. Si preguntan por qué
+- Los fijos se reparten entre 150 piezas/mes, no entre el pedido. Si preguntan por qué
   un pedido chico no sale más caro, esa es la razón.
 
 ────────────────────────────────────────
