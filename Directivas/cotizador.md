@@ -84,7 +84,13 @@ Ojo: el Discovery numera los grados del 1 al 3, pero sus propios rangos ("Bajo: 
 menos") solo cuadran con la escala 0/1/2. Leerlo como 1/2/3 hace que casi todo caiga en
 "difícil" y el precio salga inflado.
 
-## Tiempos de acabado (minutos por pieza, Discovery 2026-09)
+## Tiempos: tres etapas, cada una por tamaño y dificultad
+Como plantea el Discovery, el tiempo de una pieza se arma sumando etapas, y cada etapa
+tiene su tabla de tamaño × dificultad. Viven en la pestaña **Tiempos Estándar** del
+Cotizador Interno y el bot las llena preguntando (`guardar_tiempo_estandar`).
+
+1. **Preparación del bizcocho** — pulir y limpiar antes de esmaltar. *Sin medir.*
+2. **Acabado** — esmalte color, esmalte transparente, letras y reverso. **Medido:**
 
 | Tamaño | Fácil | Medio | Difícil |
 |---|---|---|---|
@@ -94,8 +100,16 @@ menos") solo cuadran con la escala 0/1/2. Leerlo como 1/2/3 hace que casi todo c
 | L | — | 18.3 | 26.2 |
 | XL | — | 26.0 | — |
 
-Las celdas vacías no están medidas. El cotizador **se niega a calcular** en esos casos y
-pide los minutos a mano (`--minutos` o `minutos_acabado`). No se estiman en silencio.
+3. **Terminado y empaque** — sellos y firmas, cargue del horno de esmalte, pulido final,
+   empaque. *Sin medir.*
+
+**El modelado no está** y no es un olvido: el taller compra el bizcocho ya hecho, así que
+los pasos de placa, vaciado, retornear, pegar oreja, pulir crudo y cargue del horno de
+bizcocho no aplican. Si algún día se modela en casa, hay que agregar esa etapa.
+
+Cuando una etapa no tiene el tiempo del tamaño y dificultad que se está cotizando, el
+motor lo dice y cobra solo lo que sabe. Si falta el de **acabado** (L fácil, XL fácil,
+XL difícil), se niega a calcular y pide los minutos. No se estima en silencio.
 
 ## Parámetros
 Viven en la pestaña **Parámetros Cotizador** de la hoja *Cotizador Interno*

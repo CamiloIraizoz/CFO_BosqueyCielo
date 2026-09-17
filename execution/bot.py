@@ -25,7 +25,7 @@ from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
-    guardar_hoja_cotizacion as _cot_guardar_hoja
+    guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -273,6 +273,20 @@ TOOLS = [
                 "numero":    {"type": "string", "description": "Número de cotización si ya existe (ej. BYC-604084)"}
             },
             "required": ["cantidad", "tamano"]
+        }
+    },
+    {
+        "name": "guardar_tiempo_estandar",
+        "description": "Guarda cuántos minutos toma una etapa de producción para un tamaño y dificultad. Etapas: 'Preparación del bizcocho' (pulir y limpiar antes de esmaltar), 'Acabado' (esmalte color y transparente), 'Terminado y empaque' (sellos, cargue del horno, pulido final, empaque). Úsalo cuando el usuario diga cuánto se demora un paso.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "etapa":      {"type": "string"},
+                "tamano":     {"type": "string", "description": "XS | S | M | L | XL"},
+                "dificultad": {"type": "string", "description": "facil | medio | dificil"},
+                "minutos":    {"type": "number"}
+            },
+            "required": ["etapa", "tamano", "dificultad", "minutos"]
         }
     },
     {
@@ -614,7 +628,17 @@ Cuando el usuario responda → guardar_parametro_cotizador(parametro, valor) →
 llamar calcular_precio para mostrar el precio ya corregido. Si el guardado devuelve ❌,
 DILO: significa que el dato no quedó guardado y el precio no va a cambiar.
 Para el esmalte pregunta las ONZAS por pieza (oz_esmalte_por_pieza): es más fácil de
-responder que un valor en pesos, y el galón de 128 oz a $260.000 da $2.031 la onza. Pregunta de a un dato por
+responder que un valor en pesos, y el galón de 128 oz a $260.000 da $2.031 la onza.
+
+TIEMPOS POR ETAPA: el tiempo de una pieza se arma sumando tres etapas, cada una por
+tamaño y dificultad (como las tablas del Discovery):
+  · "Preparación del bizcocho" — pulir y limpiar antes de esmaltar
+  · "Acabado" — esmalte color y transparente (ESTA ya está medida)
+  · "Terminado y empaque" — sellos, cargue del horno, pulido final, empaque
+El MODELADO no existe en el cotizador: el taller compra el bizcocho ya hecho.
+Cuando una etapa salga como "sin medir", pregunta por ella nombrando el tamaño
+("¿cuántos minutos toma pulir y limpiar un bizcocho mediano?") y guarda la respuesta con
+guardar_tiempo_estandar. Cada tamaño y dificultad se pregunta una sola vez. Pregunta de a un dato por
 mensaje, no los cuatro de una. Si el usuario no sabe o dice "después", sigue sin
 insistir: se pregunta de nuevo en la siguiente cotización.
 
@@ -876,6 +900,9 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             resultado = _cot_guardar_hoja(_r, inp.get("numero", ""))
                         except ValueError as e:
                             resultado = f"No se pudo guardar la hoja: {e}"
+                    elif name == "guardar_tiempo_estandar":
+                        resultado = _cot_guardar_tiempo(
+                            inp["etapa"], inp["tamano"], inp["dificultad"], inp["minutos"])
                     elif name == "guardar_parametro_cotizador":
                         resultado = _cot_guardar_param(inp["parametro"], inp["valor"])
                     # ── Competencia ─────────────────────────────────────────

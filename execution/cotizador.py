@@ -120,15 +120,33 @@ PARAMS_PREGUNTABLES = {
     "margen_pct":          "¿Qué margen quieres aplicar sobre el costo? (en %)",
 }
 
-# Discovery 2026-09: minutos de ACABADO por pieza. None = no medido todavía.
-# XS fácil viene estimado en el propio Discovery a partir de los tamaños vecinos.
-TIEMPOS_ACABADO = {
+# Tiempos estándar en minutos por pieza, por etapa / tamaño / dificultad, como los
+# plantea el Discovery. None = no medido todavía; el motor lo dice, no lo estima.
+#
+# El taller compra el bizcocho, así que la etapa de MODELADO (placa, vaciado,
+# retornear, oreja, pulir crudo, cargue del horno de bizcocho) no aplica y no está.
+TIEMPOS_ACABADO = {   # esmalte color + esmalte transparente, letras y reverso
     "XS": {"facil": 4.0,  "medio": 10.0, "dificil": 20.0},
     "S":  {"facil": 6.5,  "medio": 12.6, "dificil": 23.0},
     "M":  {"facil": 9.5,  "medio": 14.7, "dificil": 23.0},
     "L":  {"facil": None, "medio": 18.3, "dificil": 26.2},
     "XL": {"facil": None, "medio": 26.0, "dificil": None},
 }
+
+_VACIA = {t: {"facil": None, "medio": None, "dificil": None}
+          for t in ["XS", "S", "M", "L", "XL"]}
+
+# Pulir y limpiar el bizcocho antes de esmaltar. Sin medir.
+TIEMPOS_PREPARACION = {t: dict(d) for t, d in _VACIA.items()}
+# Sellos y firmas, cargue del horno de esmalte, pulido final y empaque. Sin medir.
+TIEMPOS_TERMINADO = {t: dict(d) for t, d in _VACIA.items()}
+
+ETAPAS_TIEMPO = {
+    "Preparación del bizcocho": TIEMPOS_PREPARACION,
+    "Acabado":                  TIEMPOS_ACABADO,
+    "Terminado y empaque":      TIEMPOS_TERMINADO,
+}
+PESTANA_TIEMPOS = "Tiempos Estándar"
 
 TAMANOS = list(TIEMPOS_ACABADO.keys())
 DIFICULTADES = ["facil", "medio", "dificil"]
@@ -213,6 +231,29 @@ def cargar_parametros() -> dict:
     return params
 
 
+def cargar_tiempos() -> dict:
+    """Lee la pestaña de tiempos estándar. Sin ella, usa las tablas de respaldo."""
+    etapas = {nombre: {t: dict(d) for t, d in tabla.items()}
+              for nombre, tabla in ETAPAS_TIEMPO.items()}
+    try:
+        from sheets import leer_sheet_numericos
+        filas = leer_sheet_numericos(_rango(PESTANA_TIEMPOS, "A2:E40"),
+                                     sheet_id=COTIZADOR_SHEET_ID)
+        for fila in filas:
+            if len(fila) < 3:
+                continue
+            etapa, tamano = str(fila[0]).strip(), str(fila[1]).strip().upper()
+            if etapa not in etapas or tamano not in TAMANOS:
+                continue
+            for i, dif in enumerate(DIFICULTADES, start=2):
+                valor = fila[i] if len(fila) > i else ""
+                if str(valor).strip() != "":
+                    etapas[etapa][tamano][dif] = float(valor)
+    except Exception as e:
+        print(f"[cotizador] Tiempos de respaldo ({e})")
+    return etapas
+
+
 def asegurar_pestana_parametros() -> str:
     """Crea la pestaña de parámetros con los valores actuales si todavía no existe."""
     from sheets import crear_pestana, escribir_rango
@@ -224,6 +265,58 @@ def asegurar_pestana_parametros() -> str:
     escritura = escribir_rango(_rango(PESTANA_PARAMS, f"A1:C{len(filas)}"), filas,
                                sheet_id=COTIZADOR_SHEET_ID)
     return respuesta if not escritura.startswith("Error") else escritura
+
+
+def asegurar_pestana_tiempos() -> str:
+    """Crea la pestaña de tiempos con todas las filas (etapa x tamaño) si no existe."""
+    from sheets import crear_pestana, escribir_rango
+    respuesta = crear_pestana(PESTANA_TIEMPOS, sheet_id=COTIZADOR_SHEET_ID)
+    if "creada" not in respuesta:
+        return respuesta
+    filas = [["Etapa", "Tamaño", "Fácil", "Medio", "Difícil"]]
+    for etapa, tabla in ETAPAS_TIEMPO.items():
+        for tam in TAMANOS:
+            fila = [etapa, tam]
+            fila += [tabla[tam][d] if tabla[tam][d] is not None else "" for d in DIFICULTADES]
+            filas.append(fila)
+    escribir_rango(_rango(PESTANA_TIEMPOS, f"A1:E{len(filas)}"), filas,
+                   sheet_id=COTIZADOR_SHEET_ID)
+    return respuesta
+
+
+def guardar_tiempo(etapa: str, tamano: str, dificultad: str, minutos: float) -> str:
+    """Guarda un tiempo estándar en la pestaña de tiempos."""
+    etapa = next((e for e in ETAPAS_TIEMPO if e.lower() == str(etapa).strip().lower()), "")
+    if not etapa:
+        return f"Etapa no válida. Las que hay: {', '.join(ETAPAS_TIEMPO)}"
+    tamano = str(tamano).strip().upper()
+    dificultad = str(dificultad).strip().lower()
+    if tamano not in TAMANOS or dificultad not in DIFICULTADES:
+        return f"Usa tamaño {'/'.join(TAMANOS)} y dificultad {'/'.join(DIFICULTADES)}"
+
+    try:
+        from sheets import leer_sheet_numericos, escribir_rango
+        asegurar_pestana_tiempos()
+        filas = leer_sheet_numericos(_rango(PESTANA_TIEMPOS, "A1:B40"),
+                                     sheet_id=COTIZADOR_SHEET_ID)
+        destino = None
+        for i, fila in enumerate(filas, start=1):
+            if (len(fila) >= 2 and str(fila[0]).strip() == etapa
+                    and str(fila[1]).strip().upper() == tamano):
+                destino = i
+                break
+        if destino is None:
+            destino = len(filas) + 1
+            escribir_rango(_rango(PESTANA_TIEMPOS, f"A{destino}:B{destino}"),
+                           [[etapa, tamano]], sheet_id=COTIZADOR_SHEET_ID)
+        columna = {"facil": "C", "medio": "D", "dificil": "E"}[dificultad]
+        escritura = escribir_rango(_rango(PESTANA_TIEMPOS, f"{columna}{destino}"),
+                                   [[float(minutos)]], sheet_id=COTIZADOR_SHEET_ID)
+        if escritura.startswith("Error"):
+            return f"❌ No se pudo guardar: {escritura}"
+        return f"✅ Guardado: {etapa} · {tamano} · {dificultad} = {minutos} min"
+    except Exception as e:
+        return f"❌ No se pudo guardar el tiempo: {e}"
 
 
 def guardar_parametro(clave: str, valor) -> str:
@@ -258,7 +351,7 @@ def guardar_parametro(clave: str, valor) -> str:
 
 def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             minutos_acabado: float = None, params: dict = None,
-            producto: str = "") -> dict:
+            producto: str = "", tiempos: dict = None) -> dict:
     """Calcula el precio de una pieza y del pedido. Devuelve el desglose completo."""
     params = params or cargar_parametros()
     advertencias = []
@@ -275,20 +368,38 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     if dificultad not in DIFICULTADES:
         raise ValueError(f"Dificultad '{dificultad}' no válida. Usa: {', '.join(DIFICULTADES)}")
 
-    # ── Tiempo ──────────────────────────────────────────────────────────────
+    # ── Tiempo: se suman las etapas que apliquen ────────────────────────────
+    etapas = tiempos or cargar_tiempos()
+
     if minutos_acabado is None:
-        minutos_acabado = TIEMPOS_ACABADO[tamano][dificultad]
+        minutos_acabado = etapas["Acabado"][tamano][dificultad]
     if minutos_acabado is None:
         raise ValueError(
             f"No hay tiempo de acabado medido para {tamano} / {dificultad}. "
             f"Pásalo a mano con minutos_acabado, o mídelo en planta.")
 
-    minutos_otros = float(params["minutos_otros_pasos"])
-    if minutos_otros == 0:
+    minutos_por_etapa = {"Acabado": float(minutos_acabado)}
+    sin_medir = []
+    for nombre, tabla in etapas.items():
+        if nombre == "Acabado":
+            continue
+        valor = tabla.get(tamano, {}).get(dificultad)
+        if valor is None:
+            sin_medir.append(nombre)
+        else:
+            minutos_por_etapa[nombre] = float(valor)
+
+    # Respaldo: un único número para todo lo que no es acabado.
+    minutos_sueltos = float(params.get("minutos_otros_pasos", 0) or 0)
+    if sin_medir and minutos_sueltos:
+        minutos_por_etapa["Otros pasos (estimado a ojo)"] = minutos_sueltos
+        sin_medir = []
+    if sin_medir:
         advertencias.append(
-            "Solo se está costeando el ACABADO. Preparación, pulido, cargue de horno "
-            "y demás pasos están en cero: el tiempo real por pieza es mayor.")
-    minutos_totales = float(minutos_acabado) + minutos_otros
+            "Sin medir: " + ", ".join(f"{e.lower()} ({tamano}/{dificultad})" for e in sin_medir)
+            + ". Solo se está cobrando el acabado, así que el tiempo real es mayor.")
+
+    minutos_totales = sum(minutos_por_etapa.values())
 
     horas_mes   = float(params["horas_semanales"]) * float(params["semanas_mes"])
     valor_hora  = float(params["salario_mensual"]) / horas_mes if horas_mes else 0
@@ -347,6 +458,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         "tamano": tamano, "dificultad": dificultad,
         "minutos_acabado": round(float(minutos_acabado), 1),
         "minutos_totales": round(minutos_totales, 1),
+        "minutos_por_etapa": {k: round(v, 1) for k, v in minutos_por_etapa.items()},
         "valor_hora": round(valor_hora),
         "desglose": [
             ("Materiales (bizcocho, esmaltes, vinilo)", materiales),
@@ -422,7 +534,11 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
         ["Tamaño", r["tamano"], ""],
         ["Dificultad del acabado", r["dificultad"], ""],
         ["Minutos de acabado", r["minutos_acabado"], "estándar del Discovery"],
-        ["Minutos de los demás pasos", p.get("minutos_otros_pasos", 0), ""],
+    ]
+    filas += [[f"Minutos — {etapa.lower()}", valor, ""]
+              for etapa, valor in r.get("minutos_por_etapa", {}).items()
+              if etapa != "Acabado"]
+    filas += [
         ["Minutos totales por pieza", r["minutos_totales"], ""],
         ["Valor hora de taller", r["valor_hora"], "salario / horas del mes"],
         ["", "", ""],
@@ -478,8 +594,11 @@ def formato_telegram(r: dict) -> str:
     lineas = [
         f"💰 {titulo} · {r['tamano']} · acabado {r['dificultad']} · {r['cantidad']} piezas",
         f"Tiempo: {r['minutos_totales']} min/pieza · hora de taller {_fmt(r['valor_hora'])}",
-        "",
     ]
+    if len(r.get("minutos_por_etapa", {})) > 1:
+        lineas.append("  (" + " · ".join(f"{k.lower()} {v}"
+                                         for k, v in r["minutos_por_etapa"].items()) + ")")
+    lineas.append("")
     for etiqueta, valor in r["desglose"]:
         if valor:
             lineas.append(f"  {etiqueta}: {_fmt(valor)}")

@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cotizador import (COTIZADOR_SHEET_ID, PARAMS_DEFECTO, PESTANA_PARAMS,
-                       TAMANOS, TIEMPOS_ACABADO, _rango)
+from cotizador import (COTIZADOR_SHEET_ID, DIFICULTADES, ETAPAS_TIEMPO, PARAMS_DEFECTO,
+                       PESTANA_PARAMS, PESTANA_TIEMPOS, TAMANOS, _rango)
 from sheets import crear_pestana, escribir_rango
 
 NOTAS = {
@@ -52,18 +52,20 @@ def setup():
     print(escribir_rango(_rango(PESTANA_PARAMS, f"A1:C{len(filas)}"), filas,
                          sheet_id=COTIZADOR_SHEET_ID))
 
-    print(crear_pestana("Tiempos Acabado", sheet_id=COTIZADOR_SHEET_ID))
-    tiempos = [["Tamaño", "Fácil", "Medio", "Difícil"]]
-    for tam in TAMANOS:
-        fila = [tam]
-        for dif in ["facil", "medio", "dificil"]:
-            valor = TIEMPOS_ACABADO[tam][dif]
-            fila.append(valor if valor is not None else "")
-        tiempos.append(fila)
+    print(crear_pestana(PESTANA_TIEMPOS, sheet_id=COTIZADOR_SHEET_ID))
+    tiempos = [["Etapa", "Tamaño", "Fácil", "Medio", "Difícil"]]
+    for etapa, tabla in ETAPAS_TIEMPO.items():
+        for tam in TAMANOS:
+            fila = [etapa, tam]
+            for dif in DIFICULTADES:
+                valor = tabla[tam][dif]
+                fila.append(valor if valor is not None else "")
+            tiempos.append(fila)
     tiempos.append([])
-    tiempos.append(["Minutos de acabado por pieza (Discovery 2026-09). "
-                    "Las celdas vacías son tiempos que todavía no se han medido."])
-    print(escribir_rango(_rango("Tiempos Acabado", f"A1:D{len(tiempos)}"), tiempos,
+    tiempos.append(["Minutos por pieza. El acabado viene del Discovery 2026-09; "
+                    "las celdas vacías son tiempos que todavía no se han medido."])
+    tiempos.append(["El modelado no está: el taller compra el bizcocho ya hecho."])
+    print(escribir_rango(_rango(PESTANA_TIEMPOS, f"A1:E{len(tiempos)}"), tiempos,
                          sheet_id=COTIZADOR_SHEET_ID))
 
     print("\nListo. Las filas marcadas PENDIENTE en Notas son las que hay que llenar "
