@@ -22,7 +22,6 @@ Réplica exacta de la hoja **Cotizador Interno** (pestaña *Costos Detallados*):
 ```
   materiales (bizcocho + esmaltes + vinilo)
 + mano de obra  (minutos por pieza x valor hora)
-+ quemas        (bizcocho + esmalte + transfer)
 + empaque
 = costo directo
 + desperdicio (10%)
@@ -34,6 +33,17 @@ Réplica exacta de la hoja **Cotizador Interno** (pestaña *Costos Detallados*):
 x margen (40% sobre el costo)
 = PVP sin IVA   →  + IVA (19%)  =  precio final
 ```
+
+## Las quemas NO son costo directo
+La energía de las dos quemas ya está dentro de **servicios públicos**, que se prorratea
+por pieza más abajo. Cobrarlas además como línea de costo directo sería contarlas dos
+veces e inflar el precio (en una taza M, unos $17.000). Los parámetros
+`costo_quema_*` existen pero van en **cero**, y solo se llenarían si algún día se mide
+el consumo por hornada y se saca ese valor de servicios públicos.
+
+Como las quemas consumen bastante energía, vale la pena revisar `pct_uso_servicios`:
+hoy está en 20%, igual que el arriendo. Si producción consume más que eso, subirlo
+cambia el precio (al 60%, los fijos por pieza pasan de $2.800 a $4.133).
 
 ## Dos decisiones de negocio (2026-09-17, con Camilo)
 
@@ -98,17 +108,29 @@ del *Ventas y Costos B&C*). Mientras no lo esté, el motor corre con los valores
 respaldo embebidos en `cotizador.py` y lo avisa en consola.
 
 Estructura actual: salario mensual $4.000.000 sobre 192 horas → hora de taller $20.833 ·
-gastos administrativos $1.230.000/mes · arriendo y servicios $840.000/mes ·
-desperdicio 10% · mercadeo 5% · margen 40% · IVA 19%.
+gastos administrativos $1.230.000/mes · arriendo $3.200.000 al 20% de uso ·
+servicios $1.000.000 al 20% de uso · desperdicio 10% · mercadeo 5% ·
+margen 40% sobre el costo · IVA 19%.
+
+## El bot pregunta lo que falta
+Cuando una cotización sale con la advertencia "Sin costo cargado: ...", el bot **pregunta
+esos valores en lenguaje llano**, de a uno por mensaje, y los guarda con
+`guardar_parametro_cotizador`. Así cada dato se pide una sola vez en la vida. Si el
+usuario no lo sabe en el momento, no se insiste: vuelve a aparecer en la siguiente
+cotización.
+
+Preguntables hoy: `costo_bizcocho`, `costo_esmaltes`, `costo_empaque`, `costo_vinilo`,
+`minutos_otros_pasos`, `volumen_referencia`, `margen_pct`.
+
+La pestaña de parámetros se crea sola la primera vez que se guarda un valor, así que no
+hace falta correr el setup a mano.
 
 ## Lo que falta cargar (al 2026-09-17)
 En la hoja están en cero, así que **hoy el precio sale por debajo del real**:
-- `costo_bizcocho`, `costo_esmaltes`, `costo_empaque`
-- `costo_quema_bizcocho`, `costo_quema_esmalte`
-- `minutos_otros_pasos` (preparación, pulido, cargue de horno y demás)
+`costo_bizcocho`, `costo_esmaltes`, `costo_empaque` y `minutos_otros_pasos`.
 
 Como referencia de la diferencia: una taza M de acabado medio da **$17.913** de PVP con
-lo que hay hoy, y **$62.123** con valores de ejemplo cargados.
+lo que hay hoy, y **$45.187** con valores de ejemplo cargados.
 
 ## Casos extremos
 - **Mostrar siempre las advertencias.** Mientras falten costos, el número no es un precio

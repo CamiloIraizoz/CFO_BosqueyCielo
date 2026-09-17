@@ -55,23 +55,42 @@ PARAMS_DEFECTO = {
     # Reparto de fijos
     "volumen_referencia":     300,        # piezas/mes — producción real (Camilo, 2026-09-17)
     "gastos_admin_mes":       1_230_000,  # contador 10% + gerente 20% + supervisor 30%
-    "arriendo_servicios_mes": 840_000,    # (arriendo 3.2M + servicios 1M) x 20% de uso
+    "arriendo_mes":           3_200_000,
+    "servicios_mes":          1_000_000,  # incluye la energía de las quemas
+    "pct_uso_local":          20.0,       # % del local dedicado a producción
+    "pct_uso_servicios":      20.0,       # % de los servicios que carga producción
     # Porcentajes
     "desperdicio_pct":        10.0,
     "mercadeo_pct":           5.0,
     "margen_pct":             40.0,
     "margen_modo":            "markup",   # markup = costo x (1+m) · sobre_venta = costo / (1-m)
     "iva_pct":                19.0,
-    # Costos por pieza — PENDIENTES de cargar (en la hoja están en cero)
+    # Costos por pieza — los pide el bot cuando faltan
     "costo_bizcocho":         0,
     "costo_esmaltes":         0,
     "costo_vinilo":           0,
+    "costo_empaque":          0,
+    # Las quemas NO son costo directo: su energía ya está dentro de servicios
+    # públicos, que se prorratea arriba (Camilo, 2026-09-17). Cargarlas aquí
+    # sería contarlas dos veces. Solo se llenan si algún día se mide el consumo
+    # por hornada y se saca de servicios.
     "costo_quema_bizcocho":   0,
     "costo_quema_esmalte":    0,
     "costo_quema_transfer":   0,
-    "costo_empaque":          0,
     # Minutos de los pasos que no son acabado (preparación, pulido, cargue…)
     "minutos_otros_pasos":    0.0,
+}
+
+# Lo que el bot puede preguntar y guardar solo. El texto es la pregunta literal.
+PARAMS_PREGUNTABLES = {
+    "costo_bizcocho":      "¿Cuánto te cuesta el bizcocho por pieza?",
+    "costo_esmaltes":      "¿Cuánto cuestan los esmaltes por pieza?",
+    "costo_empaque":       "¿Cuánto cuesta el empaque por pieza?",
+    "costo_vinilo":        "¿Cuánto cuesta el vinilo o transfer por pieza? (0 si no lleva)",
+    "minutos_otros_pasos": "Además del acabado, ¿cuántos minutos por pieza se van en "
+                           "preparación, pulido, cargue de horno y empaque?",
+    "volumen_referencia":  "¿Cuántas piezas al mes está produciendo el taller?",
+    "margen_pct":          "¿Qué margen quieres aplicar sobre el costo? (en %)",
 }
 
 # Discovery 2026-09: minutos de ACABADO por pieza. None = no medido todavía.
@@ -112,6 +131,20 @@ def _fmt(n) -> str:
     return f"${int(round(n)):,}".replace(",", ".")
 
 
+def fijos_locativos_mes(params: dict) -> float:
+    """Arriendo y servicios que carga producción. Los servicios incluyen las quemas,
+    así que su % de uso puede ser mayor que el del local."""
+    return (float(params["arriendo_mes"]) * float(params["pct_uso_local"]) / 100.0
+            + float(params["servicios_mes"]) * float(params["pct_uso_servicios"]) / 100.0)
+
+
+def parametros_pendientes(params: dict = None) -> list:
+    """Parámetros preguntables que siguen en cero, en orden de impacto en el precio."""
+    params = params or cargar_parametros()
+    orden = ["costo_bizcocho", "costo_esmaltes", "costo_empaque", "minutos_otros_pasos"]
+    return [c for c in orden if float(params.get(c, 0) or 0) == 0]
+
+
 def cargar_parametros() -> dict:
     """Lee la pestaña de parámetros. Si no se puede, usa los valores de respaldo."""
     params = dict(PARAMS_DEFECTO)
@@ -129,6 +162,43 @@ def cargar_parametros() -> dict:
     except Exception as e:
         print(f"[cotizador] Usando parámetros de respaldo ({e})")
     return params
+
+
+def asegurar_pestana_parametros() -> str:
+    """Crea la pestaña de parámetros con los valores actuales si todavía no existe."""
+    from sheets import crear_pestana, escribir_rango
+    respuesta = crear_pestana(PESTANA_PARAMS, sheet_id=COTIZADOR_SHEET_ID)
+    if "creada" not in respuesta:
+        return respuesta
+    filas = [["Parámetro", "Valor", "Notas"]]
+    filas += [[c, v, PARAMS_PREGUNTABLES.get(c, "")] for c, v in PARAMS_DEFECTO.items()]
+    escribir_rango(f"{PESTANA_PARAMS}!A1:C{len(filas)}", filas, sheet_id=COTIZADOR_SHEET_ID)
+    return respuesta
+
+
+def guardar_parametro(clave: str, valor) -> str:
+    """Escribe un parámetro en la hoja para que quede guardado de una vez por todas."""
+    if clave not in PARAMS_DEFECTO:
+        return (f"'{clave}' no es un parámetro del cotizador. "
+                f"Los que se pueden guardar: {', '.join(sorted(PARAMS_DEFECTO))}")
+    try:
+        from sheets import leer_sheet_numericos, escribir_rango
+        asegurar_pestana_parametros()
+        filas = leer_sheet_numericos(f"{PESTANA_PARAMS}!A1:A60", sheet_id=COTIZADOR_SHEET_ID)
+        fila_destino = None
+        for i, fila in enumerate(filas, start=1):
+            if fila and str(fila[0]).strip() == clave:
+                fila_destino = i
+                break
+        if fila_destino is None:
+            fila_destino = len(filas) + 1
+            escribir_rango(f"{PESTANA_PARAMS}!A{fila_destino}", [[clave]],
+                           sheet_id=COTIZADOR_SHEET_ID)
+        escribir_rango(f"{PESTANA_PARAMS}!B{fila_destino}", [[valor]],
+                       sheet_id=COTIZADOR_SHEET_ID)
+        return f"✅ Guardado: {clave} = {valor}"
+    except Exception as e:
+        return f"No se pudo guardar {clave}: {e}"
 
 
 def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
@@ -171,10 +241,10 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
               + float(params["costo_quema_transfer"]))
     empaque = float(params["costo_empaque"])
 
+    # Las quemas no se listan: su energía ya va dentro de servicios públicos.
     faltantes = [n for n, v in [
-        ("bizcocho", params["costo_bizcocho"]), ("esmaltes", params["costo_esmaltes"]),
-        ("quema de bizcocho", params["costo_quema_bizcocho"]),
-        ("quema de esmalte", params["costo_quema_esmalte"]),
+        ("bizcocho", params["costo_bizcocho"]),
+        ("esmaltes", params["costo_esmaltes"]),
         ("empaque", params["costo_empaque"])] if float(v) == 0]
     if faltantes:
         advertencias.append("Sin costo cargado: " + ", ".join(faltantes) +
@@ -187,7 +257,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     # ── Fijos: repartidos entre el volumen de referencia, no entre el pedido ─
     volumen = float(params["volumen_referencia"]) or 1
     mercadeo  = directo_total * float(params["mercadeo_pct"]) / 100.0
-    arriendo  = float(params["arriendo_servicios_mes"]) / volumen
+    arriendo  = fijos_locativos_mes(params) / volumen
     admin     = float(params["gastos_admin_mes"]) / volumen
     gran_total = directo_total + mercadeo + arriendo + admin
 
@@ -222,7 +292,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             ("Empaque", empaque),
             ("Desperdicio", desperdicio),
             ("Mercadeo", mercadeo),
-            ("Arriendo y servicios", arriendo),
+            ("Arriendo y servicios (incluye quemas)", arriendo),
             ("Gastos administrativos", admin),
         ],
         "costo_directo": round(costo_directo),

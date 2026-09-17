@@ -23,7 +23,8 @@ from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal
     registrar_cotizacion as registrar_cotizacion_hs
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
-from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato
+from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
+    guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -254,6 +255,19 @@ TOOLS = [
                 "minutos_acabado": {"type": "number", "description": "Minutos de acabado a mano. Solo si no hay estándar medido para ese tamaño/dificultad."}
             },
             "required": ["cantidad", "tamano"]
+        }
+    },
+
+    {
+        "name": "guardar_parametro_cotizador",
+        "description": "Guarda un costo o parámetro del cotizador en la hoja, para no volver a preguntarlo nunca. Úsalo apenas el usuario te diga un valor que falta (ej. 'el bizcocho me cuesta 8000' → guardar_parametro_cotizador('costo_bizcocho', 8000)). Parámetros: costo_bizcocho, costo_esmaltes, costo_empaque, costo_vinilo, minutos_otros_pasos, volumen_referencia, margen_pct, salario_mensual, arriendo_mes, servicios_mes, pct_uso_local, pct_uso_servicios, gastos_admin_mes, desperdicio_pct, mercadeo_pct, iva_pct.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "parametro": {"type": "string", "description": "Nombre exacto del parámetro"},
+                "valor":     {"type": "number", "description": "Valor en pesos, minutos o porcentaje según el parámetro"}
+            },
+            "required": ["parametro", "valor"]
         }
     },
 
@@ -574,10 +588,21 @@ TAMAÑO: si no lo dicen, dedúcelo del tipo de pieza y AVISA qué asumiste
 ("asumí tamaño M, una taza estándar"). XS/S piezas pequeñas · M taza o plato de 27cm ·
 L jarra o pieza de 2kg · XL matera grande de 4kg+.
 
+COSTOS QUE FALTAN → PREGÚNTALOS, no te quedes con la advertencia:
+Cuando el resultado avise "Sin costo cargado: bizcocho, esmaltes...", muestra el precio
+y ACTO SEGUIDO pregunta por esos valores, uno por uno, en lenguaje llano:
+   "Para que el precio quede completo me falta un dato: ¿cuánto te cuesta el bizcocho
+    por pieza?"
+Cuando el usuario responda → guardar_parametro_cotizador(parametro, valor) → vuelve a
+llamar calcular_precio para mostrar el precio ya corregido. Pregunta de a un dato por
+mensaje, no los cuatro de una. Si el usuario no sabe o dice "después", sigue sin
+insistir: se pregunta de nuevo en la siguiente cotización.
+
 REGLAS:
-- El resultado trae ADVERTENCIAS (⚠️). Muéstralas SIEMPRE, sin excepción: hoy faltan por
-  cargar los costos de bizcocho, esmaltes, quemas y empaque, así que el precio sale por
-  DEBAJO del real. Nunca presentes el número como definitivo mientras haya advertencias.
+- El resultado trae ADVERTENCIAS (⚠️). Muéstralas SIEMPRE, sin excepción. Mientras haya
+  advertencias el precio sale por DEBAJO del real: nunca lo presentes como definitivo.
+- Las QUEMAS no se cobran aparte: su energía ya está dentro de los servicios públicos,
+  que se reparten por pieza. Cargarlas como costo sería contarlas dos veces.
 - Si no hay tiempo medido para ese tamaño y dificultad (L fácil, XL fácil, XL difícil),
   el script avisa: pídele al usuario los minutos y pásalos en minutos_acabado.
 - El precio es SUGERIDO. La decisión de cobrar más o menos es de Camilo.
@@ -817,6 +842,8 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                                 inp.get("minutos_acabado"), producto=inp.get("producto", "")))
                         except ValueError as e:
                             resultado = f"No se pudo calcular: {e}"
+                    elif name == "guardar_parametro_cotizador":
+                        resultado = _cot_guardar_param(inp["parametro"], inp["valor"])
                     # ── Competencia ─────────────────────────────────────────
                     elif name == "barrer_competencia":
                         _filas = _comp_barrer(inp.get("tipo", ""), inp.get("ciudad", ""))
