@@ -3,10 +3,15 @@
 Cotizaciones y email para Bosque y Cielo.
 Env var requerida: RESEND_API_KEY
 """
+import base64
 import os
+import re
+import unicodedata
 import requests as _requests
 from pathlib import Path
 from dotenv import load_dotenv
+
+from pdf_cotizacion import generar_pdf_cotizacion, generar_pdf_pottery
 
 load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 
@@ -14,22 +19,116 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 RESEND_URL     = "https://api.resend.com/emails"
 
 FROM_EMAIL = "Bosque y Cielo <hola@bosqueycielo.com>"
+# Copia interna: siempre reciben la cotización. Si el cliente no tiene correo,
+# son los únicos destinatarios.
 CC_EMAILS  = ["daniela.sandoval@bosqueycielo.com", "camilo.iraizoz@gmail.com"]
 
 
-def _send(to_email: str, subject: str, html: str) -> str:
-    """Envía un email via Resend API."""
+def _send(to_emails: list, subject: str, html: str,
+          cc_emails: list = None, adjuntos: list = None) -> str:
+    """Envía un email via Resend API. adjuntos: [(filename, bytes)]."""
     if not RESEND_API_KEY:
         return "Error: RESEND_API_KEY no configurado."
+    if not to_emails:
+        return "Error: sin destinatarios."
+
+    payload = {"from": FROM_EMAIL, "to": to_emails, "subject": subject, "html": html}
+    if cc_emails:
+        payload["cc"] = cc_emails
+    if adjuntos:
+        payload["attachments"] = [
+            {"filename": nombre, "content": base64.b64encode(contenido).decode()}
+            for nombre, contenido in adjuntos
+        ]
+
     resp = _requests.post(
         RESEND_URL,
         headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-        json={"from": FROM_EMAIL, "to": [to_email], "cc": CC_EMAILS, "subject": subject, "html": html},
-        timeout=15,
+        json=payload,
+        timeout=30,
     )
     if resp.status_code in (200, 201):
         return resp.json().get("id", "ok")
     return f"Error Resend {resp.status_code}: {resp.text}"
+
+
+def _destinatarios(email_cliente: str):
+    """(to, cc, es_interna). Sin correo del cliente → va solo a Camilo y Daniela."""
+    email_cliente = (email_cliente or "").strip()
+    if email_cliente:
+        return [email_cliente], list(CC_EMAILS), False
+    return list(CC_EMAILS), [], True
+
+
+def _nombre_archivo(numero: str, empresa: str) -> str:
+    """Nombre de archivo seguro: Cotizacion_BYC-123456_Cafe_del_Valle.pdf"""
+    limpio = unicodedata.normalize("NFKD", empresa or "").encode("ascii", "ignore").decode()
+    limpio = re.sub(r"[^A-Za-z0-9]+", "_", limpio).strip("_")[:40]
+    return f"Cotizacion_{numero}{'_' + limpio if limpio else ''}.pdf"
+
+
+def _detalle_productos(datos: dict) -> str:
+    """Resumen en texto plano de los ítems cotizados (para la nota de HubSpot)."""
+    lineas = []
+    for prod in datos.get("productos", []):
+        qty = int(prod.get("cantidad", 1))
+        pre = int(float(prod.get("precio_unitario", 0)))
+        lineas.append(f"• {prod.get('nombre','')} × {qty} — {_fmt(pre)} c/u = {_fmt(qty*pre)}")
+    envio = int(float(datos.get("envio", 0) or 0))
+    if envio:
+        lineas.append(f"• Envío — {_fmt(envio)}")
+    return "\n".join(lineas)
+
+
+def _detalle_taller(datos: dict) -> str:
+    """Resumen en texto plano del taller cotizado (para la nota de HubSpot)."""
+    taller = datos.get("taller", {})
+    partes = int(taller.get("participantes", 1))
+    precio = int(float(taller.get("precio_por_persona", 0)))
+    lineas = [f"• {taller.get('tipo','Taller')} — {partes} participantes × {_fmt(precio)}"]
+    for label, key in [("Ejercicio", "ejercicio"), ("Lugar", "lugar"),
+                       ("Fecha del taller", "fecha_taller"), ("Duración", "duracion")]:
+        if taller.get(key):
+            lineas.append(f"• {label}: {taller[key]}")
+    return "\n".join(lineas)
+
+
+def preparar_cotizacion(datos: dict, tipo: str = "productos") -> dict:
+    """Asigna número, calcula el total y genera el PDF. NO envía nada.
+
+    Devuelve el paquete que comparten el envío por correo y el registro en HubSpot,
+    para no numerar dos veces ni regenerar el PDF.
+    """
+    cliente = datos.get("cliente", {})
+    empresa = cliente.get("empresa") or cliente.get("nombre", "")
+
+    if tipo == "pottery":
+        numero = datos.get("numero") or f"PL-{str(__import__('time').time_ns())[-6:]}"
+        taller = datos.get("taller", {})
+        total = int(taller.get("participantes", 1)) * int(float(taller.get("precio_por_persona", 0)))
+        detalle   = _detalle_taller(datos)
+        generador = generar_pdf_pottery
+        etiqueta  = "Pottery Lab"
+    else:
+        numero = datos.get("numero") or _numero()
+        total = sum(
+            int(float(p.get("precio_unitario", 0))) * int(p.get("cantidad", 1))
+            for p in datos.get("productos", [])
+        ) + int(float(datos.get("envio", 0) or 0))
+        detalle   = _detalle_productos(datos)
+        generador = generar_pdf_cotizacion
+        etiqueta  = "Bosque y Cielo"
+
+    datos["numero"] = numero
+    archivo = _nombre_archivo(numero, empresa)
+    try:
+        pdf = generador(datos)
+    except Exception as e:
+        print(f"[cotizacion] PDF no generado ({numero}): {e}")
+        pdf = None
+
+    return {"numero": numero, "total": total, "empresa": empresa, "detalle": detalle,
+            "archivo": archivo, "pdf": pdf, "tipo": tipo, "etiqueta": etiqueta}
 
 
 def _fmt(value) -> str:
@@ -376,49 +475,61 @@ def generar_html_cotizacion_pottery(datos: dict) -> str:
 </html>"""
 
 
-def enviar_cotizacion_pottery(datos: dict) -> str:
-    """Envía cotización Pottery Lab (experiencias) por email."""
+def enviar_cotizacion_pottery(datos: dict, paquete: dict = None) -> str:
+    """Envía cotización Pottery Lab (experiencias) por email, con el PDF adjunto.
+
+    El correo del cliente es opcional: sin él, la cotización va solo a Camilo y Daniela.
+    """
     if not RESEND_API_KEY:
         return "Error: RESEND_API_KEY no configurado en .env"
 
-    cliente  = datos.get("cliente", {})
-    to_email = cliente.get("email", "").strip()
-    if not to_email:
-        return "Error: falta el correo del cliente."
+    cliente = datos.get("cliente", {})
+    to_emails, cc_emails, interna = _destinatarios(cliente.get("email", ""))
 
-    numero = datos.get("numero") or f"PL-{str(__import__('time').time_ns())[-6:]}"
-    datos["numero"] = numero
+    paquete = paquete or preparar_cotizacion(datos, "pottery")
+    numero, total, empresa = paquete["numero"], paquete["total"], paquete["empresa"]
 
-    taller  = datos.get("taller", {})
-    total   = int(taller.get("participantes", 1)) * int(float(taller.get("precio_por_persona", 0)))
-    empresa = cliente.get("empresa") or cliente.get("nombre", "")
-    asunto  = f"Cotización Pottery Lab — {empresa} ({numero})"
+    asunto = f"Cotización Pottery Lab — {empresa} ({numero})"
+    if interna:
+        asunto = f"[Interna] {asunto}"
 
-    result = _send(to_email, asunto, generar_html_cotizacion_pottery(datos))
+    adjuntos = [(paquete["archivo"], paquete["pdf"])] if paquete["pdf"] else []
+    result = _send(to_emails, asunto, generar_html_cotizacion_pottery(datos),
+                   cc_emails=cc_emails, adjuntos=adjuntos)
     if result.startswith("Error"):
         return result
-    return f"✅ Cotización Pottery Lab {numero} enviada a {to_email} · Total: {_fmt(total)}"
+
+    destino = ", ".join(to_emails)
+    aviso   = "" if adjuntos else " ⚠️ PDF no se pudo generar (va solo en el cuerpo del correo)."
+    prefijo = "✅ Cotización Pottery Lab" if not interna else "✅ Cotización Pottery Lab (interna)"
+    return f"{prefijo} {numero} enviada a {destino} con PDF adjunto · Total: {_fmt(total)}{aviso}"
 
 
-def enviar_cotizacion(datos: dict) -> str:
-    """Envía cotización Bosque y Cielo (productos) por email via Resend."""
-    cliente  = datos.get("cliente", {})
-    to_email = cliente.get("email", "").strip()
-    if not to_email:
-        return "Error: falta el correo del cliente."
+def enviar_cotizacion(datos: dict, paquete: dict = None) -> str:
+    """Envía cotización Bosque y Cielo (productos) por email, con el PDF adjunto.
 
-    numero = datos.get("numero") or _numero()
-    datos["numero"] = numero
+    El correo del cliente es opcional: sin él, la cotización va solo a Camilo y Daniela.
+    """
+    if not RESEND_API_KEY:
+        return "Error: RESEND_API_KEY no configurado en .env"
 
-    productos = datos.get("productos", [])
-    total = sum(
-        int(float(p.get("precio_unitario", 0))) * int(p.get("cantidad", 1))
-        for p in productos
-    ) + int(float(datos.get("envio", 0) or 0))
-    empresa = cliente.get("empresa") or cliente.get("nombre", "")
-    asunto  = f"Cotización Bosque y Cielo — {empresa} ({numero})"
+    cliente = datos.get("cliente", {})
+    to_emails, cc_emails, interna = _destinatarios(cliente.get("email", ""))
 
-    result = _send(to_email, asunto, generar_html_cotizacion(datos))
+    paquete = paquete or preparar_cotizacion(datos, "productos")
+    numero, total, empresa = paquete["numero"], paquete["total"], paquete["empresa"]
+
+    asunto = f"Cotización Bosque y Cielo — {empresa} ({numero})"
+    if interna:
+        asunto = f"[Interna] {asunto}"
+
+    adjuntos = [(paquete["archivo"], paquete["pdf"])] if paquete["pdf"] else []
+    result = _send(to_emails, asunto, generar_html_cotizacion(datos),
+                   cc_emails=cc_emails, adjuntos=adjuntos)
     if result.startswith("Error"):
         return result
-    return f"✅ Cotización {numero} enviada a {to_email} · Total: {_fmt(total)}"
+
+    destino = ", ".join(to_emails)
+    aviso   = "" if adjuntos else " ⚠️ PDF no se pudo generar (va solo en el cuerpo del correo)."
+    prefijo = "✅ Cotización" if not interna else "✅ Cotización (interna)"
+    return f"{prefijo} {numero} enviada a {destino} con PDF adjunto · Total: {_fmt(total)}{aviso}"

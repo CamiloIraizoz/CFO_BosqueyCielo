@@ -183,3 +183,227 @@ def agregar_nota(deal_id: str, nota: str) -> str:
         return f"Nota agregada al negocio {deal_id}."
     except Exception as e:
         return f"Error agregando nota: {e}"
+
+
+# ── Registro automático de cotizaciones ────────────────────────────────────────
+# Cada cotización enviada queda en HubSpot: contacto + negocio en etapa
+# "cotización" con el valor total + nota con el detalle y el PDF adjunto.
+
+ETAPAS_CERRADAS = {"closedwon", "closedlost"}
+
+
+def _buscar_contacto_id(email: str, nombre: str, empresa: str):
+    """ID del contacto existente, o None. Sin email exige coincidencia exacta de nombre."""
+    url = f"{BASE_URL}/crm/v3/objects/contacts/search"
+    props = ["firstname", "lastname", "email", "company"]
+    try:
+        if email:
+            body = {
+                "filterGroups": [{"filters": [
+                    {"propertyName": "email", "operator": "EQ", "value": email}
+                ]}],
+                "properties": props, "limit": 1,
+            }
+            r = requests.post(url, json=body, headers=_headers(), timeout=15)
+            r.raise_for_status()
+            resultados = r.json().get("results", [])
+            if resultados:
+                return resultados[0]["id"]
+            return None
+
+        # Sin email: solo aceptamos coincidencia exacta de nombre, para no
+        # colgar la cotización del contacto equivocado.
+        r = requests.post(url, json={"query": nombre, "properties": props, "limit": 10},
+                          headers=_headers(), timeout=15)
+        r.raise_for_status()
+        objetivo = nombre.strip().lower()
+        for c in r.json().get("results", []):
+            p = c["properties"]
+            completo = f"{p.get('firstname','') or ''} {p.get('lastname','') or ''}".strip().lower()
+            if completo == objetivo:
+                return c["id"]
+        return None
+    except Exception as e:
+        print(f"[hubspot] Error buscando contacto: {e}")
+        return None
+
+
+def _crear_contacto_id(nombre: str, empresa: str, email: str = "", telefono: str = ""):
+    """Crea el contacto y devuelve su ID, o None si falla."""
+    partes = nombre.strip().split(" ", 1)
+    props = {"firstname": partes[0], "lastname": partes[1] if len(partes) > 1 else ""}
+    if empresa:
+        props["company"] = empresa
+    if email:
+        props["email"] = email
+    if telefono:
+        props["phone"] = telefono
+    try:
+        r = requests.post(f"{BASE_URL}/crm/v3/objects/contacts",
+                          json={"properties": props}, headers=_headers(), timeout=15)
+        r.raise_for_status()
+        return r.json()["id"]
+    except Exception as e:
+        print(f"[hubspot] Error creando contacto: {e}")
+        return None
+
+
+def _deal_abierto_de_contacto(contacto_id: str):
+    """Negocio abierto más reciente del contacto: {id, etapa, nombre}, o None."""
+    try:
+        r = requests.get(
+            f"{BASE_URL}/crm/v4/objects/contacts/{contacto_id}/associations/deals",
+            headers=_headers(), timeout=15)
+        r.raise_for_status()
+        ids = [str(x["toObjectId"]) for x in r.json().get("results", [])]
+        if not ids:
+            return None
+
+        r = requests.post(
+            f"{BASE_URL}/crm/v3/objects/deals/batch/read",
+            json={"inputs": [{"id": i} for i in ids],
+                  "properties": ["dealname", "dealstage", "amount", "createdate"]},
+            headers=_headers(), timeout=15)
+        r.raise_for_status()
+        abiertos = [d for d in r.json().get("results", [])
+                    if d["properties"].get("dealstage") not in ETAPAS_CERRADAS]
+        if not abiertos:
+            return None
+        abiertos.sort(key=lambda d: d["properties"].get("createdate", ""), reverse=True)
+        elegido = abiertos[0]
+        return {"id": elegido["id"],
+                "etapa": elegido["properties"].get("dealstage", ""),
+                "nombre": elegido["properties"].get("dealname", "")}
+    except Exception as e:
+        print(f"[hubspot] Error buscando negocios del contacto {contacto_id}: {e}")
+        return None
+
+
+def _subir_archivo(nombre_archivo: str, contenido: bytes):
+    """Sube el PDF a HubSpot Files y devuelve su ID, o None. Requiere scope 'files'."""
+    import json as _json
+    try:
+        r = requests.post(
+            f"{BASE_URL}/files/v3/files",
+            headers={"Authorization": f"Bearer {HS_TOKEN}"},   # sin Content-Type: es multipart
+            files={"file": (nombre_archivo, contenido, "application/pdf")},
+            data={"folderPath": "/cotizaciones",
+                  "options": _json.dumps({"access": "PRIVATE",
+                                          "overwrite": False,
+                                          "duplicateValidationStrategy": "NONE",
+                                          "duplicateValidationScope": "EXACT_FOLDER"})},
+            timeout=30)
+        r.raise_for_status()
+        return r.json()["id"]
+    except Exception as e:
+        print(f"[hubspot] Error subiendo PDF: {e}")
+        return None
+
+
+def _nota_con_adjunto(deal_id: str, contacto_id: str, texto: str, file_id=None) -> bool:
+    """Nota asociada al negocio (y al contacto), con el PDF adjunto si se subió."""
+    props = {"hs_note_body": texto,
+             "hs_timestamp": str(int(__import__("time").time() * 1000))}
+    if file_id:
+        props["hs_attachment_ids"] = str(file_id)
+
+    asociaciones = [{
+        "to": {"id": deal_id},
+        "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}]
+    }]
+    if contacto_id:
+        asociaciones.append({
+            "to": {"id": contacto_id},
+            "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 202}]
+        })
+    try:
+        r = requests.post(f"{BASE_URL}/crm/v3/objects/notes",
+                          json={"properties": props, "associations": asociaciones},
+                          headers=_headers(), timeout=20)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        print(f"[hubspot] Error creando nota: {e}")
+        return False
+
+
+def registrar_cotizacion(datos: dict, paquete: dict, deal_id: str = "") -> str:
+    """Sube la cotización recién enviada a HubSpot.
+
+    - Contacto: lo busca por email (o por nombre exacto) y lo crea si no existe.
+    - Negocio: usa el deal_id dado; si no, el negocio abierto más reciente del
+      contacto; si no hay ninguno, crea uno nuevo. Nunca retrocede de etapa:
+      solo mueve a "cotización" un negocio que siga en "lead".
+    - Nota: detalle de la cotización + PDF adjunto.
+
+    Devuelve una línea de resumen para Telegram. Nunca lanza excepción: el correo
+    ya salió y un fallo aquí no debe romper la respuesta al usuario.
+    """
+    if not HS_TOKEN:
+        return "⚠️ HubSpot: HUBSPOT_TOKEN no configurado, la cotización no se registró."
+
+    try:
+        cliente  = datos.get("cliente", {})
+        nombre   = cliente.get("nombre", "").strip()
+        empresa  = paquete.get("empresa", "")
+        email    = cliente.get("email", "").strip()
+        telefono = cliente.get("telefono", "").strip()
+        numero   = paquete["numero"]
+        total    = int(paquete["total"])
+
+        # 1. Contacto
+        contacto_id = _buscar_contacto_id(email, nombre, empresa)
+        contacto_nuevo = False
+        if not contacto_id and nombre:
+            contacto_id = _crear_contacto_id(nombre, empresa, email, telefono)
+            contacto_nuevo = bool(contacto_id)
+
+        # 2. Negocio
+        etiqueta_deal = f"Cotización {numero} — {empresa or nombre}"
+        deal_nuevo = False
+        ya_actualizado = False
+        if not deal_id and contacto_id:
+            existente = _deal_abierto_de_contacto(contacto_id)
+            if existente:
+                deal_id = existente["id"]
+                # Solo avanzamos desde "lead"; no bajamos un negocio ya avanzado.
+                etapa_nueva = "cotizacion" if existente["etapa"] == STAGES["lead"] else ""
+                actualizar_deal(deal_id, etapa=etapa_nueva, valor=total)
+                ya_actualizado = True
+
+        if not deal_id:
+            respuesta = crear_deal(etiqueta_deal, contacto_id or "", "cotizacion", total)
+            if respuesta.startswith("Error"):
+                return f"⚠️ HubSpot: no se pudo crear el negocio ({respuesta})"
+            deal_id = respuesta.split("ID:")[1].split(" ")[0].strip()
+            deal_nuevo = True
+        elif not ya_actualizado:
+            # deal_id que vino del usuario: solo actualizamos el valor.
+            actualizar_deal(deal_id, valor=total)
+
+        # 3. Nota con el PDF
+        file_id = _subir_archivo(paquete["archivo"], paquete["pdf"]) if paquete.get("pdf") else None
+        cuerpo = (f"<b>{etiqueta_deal}</b><br>"
+                  f"Enviada el {datos.get('fecha','')} · {paquete.get('etiqueta','')}<br><br>"
+                  + paquete.get("detalle", "").replace("\n", "<br>")
+                  + f"<br><br><b>Total: ${total:,}</b>".replace(",", ".")
+                  + (f"<br>Condiciones: {datos.get('condiciones_pago','')}"
+                     if datos.get("condiciones_pago") else "")
+                  + (f"<br>Correo del cliente: {email}" if email
+                     else "<br>Sin correo del cliente: la cotización se envió solo a Daniela y Camilo."))
+        nota_ok = _nota_con_adjunto(deal_id, contacto_id or "", cuerpo, file_id)
+
+        # 4. Resumen para Telegram
+        partes = [f"📊 HubSpot: negocio {deal_id}"]
+        partes.append("creado en etapa cotización" if deal_nuevo else "actualizado")
+        if contacto_nuevo:
+            partes.append("contacto nuevo creado")
+        if not contacto_id:
+            partes.append("⚠️ sin contacto asociado")
+        if nota_ok:
+            partes.append("nota con PDF adjunto" if file_id else "nota agregada (PDF no se pudo adjuntar)")
+        else:
+            partes.append("⚠️ la nota no se pudo crear")
+        return " · ".join(partes)
+    except Exception as e:
+        return f"⚠️ HubSpot: la cotización se envió pero no se registró ({e})"

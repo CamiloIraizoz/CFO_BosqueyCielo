@@ -19,8 +19,9 @@ load_dotenv(env_path, override=False)
 
 sys.path.insert(0, str(Path(__file__).parent))
 from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas, leer_sheet_numericos
-from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota
-from email_sender import enviar_cotizacion, enviar_cotizacion_pottery
+from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota, \
+    registrar_cotizacion as registrar_cotizacion_hs
+from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -175,13 +176,13 @@ TOOLS = [
     # ── Cotizaciones / Email ──────────────────────────────────────────────────────
     {
         "name": "enviar_cotizacion",
-        "description": "Genera y envía cotización por email al cliente. SOLO llamar después de que el usuario confirme explícitamente el envío. Siempre muestra resumen y espera 'sí, confirmo' antes de llamar.",
+        "description": "Genera la cotización en PDF y la envía por email. Si hay correo del cliente, va a él con copia a Camilo y Daniela; si no, va solo a Camilo y Daniela. SOLO llamar después de que el usuario confirme explícitamente el envío. Siempre muestra resumen y espera 'sí, confirmo' antes de llamar.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "cliente_nombre":   {"type": "string"},
                 "cliente_empresa":  {"type": "string"},
-                "cliente_email":    {"type": "string", "description": "Email del cliente — requerido"},
+                "cliente_email":    {"type": "string", "description": "Email del cliente — OPCIONAL. Si se omite, la cotización se envía solo a Camilo y Daniela."},
                 "cliente_telefono": {"type": "string"},
                 "productos": {
                     "type": "array",
@@ -201,20 +202,21 @@ TOOLS = [
                 "notas":            {"type": "string"},
                 "plazo_entrega":    {"type": "string", "description": "Ej: '4-6 semanas hábiles'"},
                 "condiciones_pago": {"type": "string", "description": "Ej: '50% anticipo · 50% contra entrega'"},
-                "fecha":            {"type": "string", "description": "Fecha formato DD/MM/AAAA"}
+                "fecha":            {"type": "string", "description": "Fecha formato DD/MM/AAAA"},
+                "deal_id":          {"type": "string", "description": "ID del negocio de HubSpot al que pertenece esta cotización — opcional. Si se omite, se usa el negocio abierto del contacto o se crea uno nuevo."}
             },
-            "required": ["cliente_nombre", "cliente_email", "productos"]
+            "required": ["cliente_nombre", "productos"]
         }
     },
     {
         "name": "enviar_cotizacion_pottery",
-        "description": "Genera y envía cotización Pottery Lab (talleres/experiencias) por email. SOLO llamar después de confirmación explícita del usuario.",
+        "description": "Genera la cotización Pottery Lab (talleres/experiencias) en PDF y la envía por email. Si hay correo del cliente, va a él con copia a Camilo y Daniela; si no, va solo a Camilo y Daniela. SOLO llamar después de confirmación explícita del usuario.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "cliente_nombre":   {"type": "string"},
                 "cliente_empresa":  {"type": "string"},
-                "cliente_email":    {"type": "string"},
+                "cliente_email":    {"type": "string", "description": "Email del cliente — OPCIONAL. Si se omite, la cotización se envía solo a Camilo y Daniela."},
                 "cliente_telefono": {"type": "string"},
                 "taller_tipo":      {"type": "string", "description": "Tipo de evento: Cumpleaños | Team building | Despedida | Corporativo | etc."},
                 "taller_ejercicio": {"type": "string", "description": "Ej: 'Esmaltado — 1 pieza', 'Torno — pieza libre'"},
@@ -226,9 +228,10 @@ TOOLS = [
                 "inclusiones":      {"type": "string", "description": "Qué incluye. Default: materiales + piezas + horneada + entrega"},
                 "condiciones_pago": {"type": "string"},
                 "notas":            {"type": "string"},
-                "fecha":            {"type": "string", "description": "Fecha de emisión DD/MM/AAAA"}
+                "fecha":            {"type": "string", "description": "Fecha de emisión DD/MM/AAAA"},
+                "deal_id":          {"type": "string", "description": "ID del negocio de HubSpot al que pertenece esta cotización — opcional. Si se omite, se usa el negocio abierto del contacto o se crea uno nuevo."}
             },
-            "required": ["cliente_nombre", "cliente_email", "taller_tipo", "taller_participantes", "taller_precio_por_persona"]
+            "required": ["cliente_nombre", "taller_tipo", "taller_participantes", "taller_precio_por_persona"]
         }
     },
 
@@ -489,21 +492,33 @@ HAY DOS TIPOS DE COTIZACIÓN. Detecta cuál usar por el contexto:
    Total = participantes × precio_por_persona. Anticipo = Total / 2.
 
 FLUJO COTIZACIÓN (aplica a ambas):
-1. Recopila todos los datos. Si falta email → pregunta solo "¿Email del cliente?".
+1. Recopila los datos. El email del cliente es OPCIONAL: NUNCA lo pidas ni bloquees el envío por él.
+   - Con email → la cotización va al cliente, con copia a Daniela y Camilo.
+   - Sin email → va solo a Daniela y Camilo (asunto "[Interna]"), para revisarla o reenviarla a mano.
+   Si el usuario da el correo, úsalo. Si no lo menciona, envía sin él.
 2. Muestra resumen antes de enviar:
    "📋 Cotización [Empresa]:
    [Detalle del pedido o taller]
-   Total: $[total] · Envío a: [email]
+   Total: $[total] · Envío a: [email del cliente | Daniela y Camilo]
    ¿Confirmo envío?"
 3. SOLO si el usuario dice "sí" → llamar el tool correspondiente.
-4. Confirmar con: ✅ + número generado.
+4. Confirmar con: ✅ + número generado + a quién llegó + qué quedó en HubSpot.
+
+REGISTRO AUTOMÁTICO EN HUBSPOT (no requiere tool aparte):
+Toda cotización enviada se sube sola a HubSpot: crea o reutiliza el contacto, deja el
+negocio en etapa "cotizacion" con el valor total, y agrega una nota con el detalle y
+el PDF adjunto. El tool devuelve una línea "📊 HubSpot: ..." — muéstrasela al usuario.
+- Si ya sabes el ID del negocio (porque lo buscaste o el usuario lo dio), pásalo en deal_id
+  para que la cotización se cuelgue de ese negocio en vez de crear uno nuevo.
+- Sin deal_id se usa el negocio abierto más reciente del contacto; si no tiene ninguno, se crea.
 
 REGLAS:
 - NUNCA enviar sin confirmación explícita.
 - Condiciones default productos: "50% anticipo · 50% contra entrega".
 - Condiciones default pottery: "50% anticipo para reservar · 50% el día del taller".
 - Plazo default productos: "4-6 semanas hábiles".
-- La cotización llega CC a Daniela y Camilo automáticamente.
+- La cotización siempre llega a Daniela y Camilo (destinatarios directos si no hay correo del cliente, en copia si lo hay).
+- Siempre se adjunta el PDF de la cotización, además del cuerpo del correo.
 
 ────────────────────────────────────────
 MÓDULO PRODUCCIÓN — DOS PROCESOS
@@ -674,7 +689,11 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             "condiciones_pago": inp.get("condiciones_pago", "50% anticipo · 50% contra entrega"),
                             "fecha":            inp.get("fecha", date.today().strftime("%d/%m/%Y")),
                         }
-                        resultado = enviar_cotizacion(datos)
+                        paquete   = preparar_cotizacion(datos, "productos")
+                        resultado = enviar_cotizacion(datos, paquete)
+                        if not resultado.startswith("Error"):
+                            resultado += "\n" + registrar_cotizacion_hs(
+                                datos, paquete, inp.get("deal_id", ""))
                     elif name == "enviar_cotizacion_pottery":
                         datos = {
                             "cliente": {
@@ -697,7 +716,11 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             "notas":            inp.get("notas", ""),
                             "fecha":            inp.get("fecha", date.today().strftime("%d/%m/%Y")),
                         }
-                        resultado = enviar_cotizacion_pottery(datos)
+                        paquete   = preparar_cotizacion(datos, "pottery")
+                        resultado = enviar_cotizacion_pottery(datos, paquete)
+                        if not resultado.startswith("Error"):
+                            resultado += "\n" + registrar_cotizacion_hs(
+                                datos, paquete, inp.get("deal_id", ""))
                     # ── Producción ───────────────────────────────────────────
                     elif name == "agregar_pedido_produccion":
                         resultado = _prod_agregar(
