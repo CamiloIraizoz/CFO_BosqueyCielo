@@ -31,10 +31,10 @@ def _service():
     return _service_cache
 
 
-def leer_sheet(rango: str) -> str:
+def leer_sheet(rango: str, sheet_id: str = "") -> str:
     try:
         result = _service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
             range=rango,
             valueRenderOption="FORMATTED_VALUE"
         ).execute()
@@ -84,10 +84,10 @@ def listar_pestanas() -> str:
         return f"Error: {e}"
 
 
-def crear_pestana(titulo: str) -> str:
+def crear_pestana(titulo: str, sheet_id: str = "") -> str:
     try:
         _service().spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
             body={"requests": [{"addSheet": {"properties": {"title": titulo}}}]}
         ).execute()
         return f"Pestaña '{titulo}' creada."
@@ -97,11 +97,11 @@ def crear_pestana(titulo: str) -> str:
         return f"Error: {e}"
 
 
-def leer_sheet_numericos(rango: str) -> list:
+def leer_sheet_numericos(rango: str, sheet_id: str = "") -> list:
     """Retorna valores crudos (números como float/int, texto como string) — UNFORMATTED_VALUE."""
     try:
         result = _service().spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
             range=rango,
             valueRenderOption="UNFORMATTED_VALUE"
         ).execute()
@@ -110,11 +110,11 @@ def leer_sheet_numericos(rango: str) -> list:
         return []
 
 
-def escribir_rango(rango: str, filas: list) -> str:
+def escribir_rango(rango: str, filas: list, sheet_id: str = "") -> str:
     """Escribe múltiples filas de una vez (más eficiente que agregar_fila en loop)."""
     try:
         _service().spreadsheets().values().update(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
             range=rango,
             valueInputOption="USER_ENTERED",
             body={"values": filas}

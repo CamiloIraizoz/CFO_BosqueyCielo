@@ -23,6 +23,7 @@ from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal
     registrar_cotizacion as registrar_cotizacion_hs
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
+from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato
 from recordatorio_amphoritas import leer_amphoritas, leer_pagos_mes, ya_pago, enviar_recordatorio as _enviar_recordatorio
 from meta_ads import listar_campanas as meta_listar_campanas, obtener_insights as meta_obtener_insights, \
     pausar_campana as meta_pausar_campana, reanudar_campana as meta_reanudar_campana, \
@@ -233,6 +234,26 @@ TOOLS = [
                 "deal_id":          {"type": "string", "description": "ID del negocio de HubSpot al que pertenece esta cotización — opcional. Si se omite, se usa el negocio abierto del contacto o se crea uno nuevo."}
             },
             "required": ["cliente_nombre", "taller_tipo", "taller_participantes", "taller_precio_por_persona"]
+        }
+    },
+
+    # ── Cotizador ────────────────────────────────────────────────────────────────
+    {
+        "name": "calcular_precio",
+        "description": "Calcula el precio sugerido de una pieza de cerámica según los costos reales del taller (materiales, mano de obra por minutos, quemas, fijos, margen e IVA). Devuelve el desglose completo. Úsalo ANTES de enviar_cotizacion cuando el usuario pregunte cuánto cobrar o pida cotizar algo sin dar precio. NO envía nada: solo calcula.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "producto":  {"type": "string", "description": "Nombre de la pieza. Ej: 'Taza cónica 250ml'"},
+                "cantidad":  {"type": "integer", "description": "Número de piezas del pedido"},
+                "tamano":    {"type": "string", "description": "XS | S | M | L | XL. Por gramaje: XS/S ~0.65kg, M ~1.2kg, L ~2kg, XL 4kg+. Si el usuario no lo dice, deduce por el tipo de pieza (taza/pocillo=S o M, plato 27cm=M, jarra=L, matera grande=XL) y dile qué asumiste."},
+                "dificultad": {"type": "string", "description": "facil | medio | dificil (del acabado). Si el usuario describe la decoración, NO lo uses: pasa pct_pintado y num_tintas y se clasifica solo."},
+                "pct_pintado": {"type": "number", "description": "% de la superficie que va pintada (0-100). Con num_tintas determina la dificultad."},
+                "num_tintas": {"type": "integer", "description": "Número de colores/tintas de la decoración"},
+                "solo_relieve": {"type": "boolean", "description": "true si la pintura va únicamente sobre el relieve (baja un grado de dificultad)"},
+                "minutos_acabado": {"type": "number", "description": "Minutos de acabado a mano. Solo si no hay estándar medido para ese tamaño/dificultad."}
+            },
+            "required": ["cantidad", "tamano"]
         }
     },
 
@@ -536,6 +557,33 @@ REGLAS:
 - Siempre se adjunta el PDF de la cotización, además del cuerpo del correo.
 
 ────────────────────────────────────────
+MÓDULO COTIZADOR — CUÁNTO COBRAR
+────────────────────────────────────────
+calcular_precio(...) → precio sugerido con desglose, según los costos reales del taller.
+
+CUÁNDO USARLO: siempre que pregunten "cuánto cobro por...", o pidan cotizar algo SIN
+dar el precio. Primero calcular_precio, después enviar_cotizacion con ese valor.
+
+CÓMO PASAR LA DECORACIÓN: no clasifiques tú la dificultad. Si el usuario describe la
+decoración ("pintada a la mitad, 2 colores"), pasa pct_pintado=50 y num_tintas=2 y el
+script aplica la regla del Discovery. Solo usa "dificultad" si el usuario dice
+textualmente fácil, medio o difícil.
+
+TAMAÑO: si no lo dicen, dedúcelo del tipo de pieza y AVISA qué asumiste
+("asumí tamaño M, una taza estándar"). XS/S piezas pequeñas · M taza o plato de 27cm ·
+L jarra o pieza de 2kg · XL matera grande de 4kg+.
+
+REGLAS:
+- El resultado trae ADVERTENCIAS (⚠️). Muéstralas SIEMPRE, sin excepción: hoy faltan por
+  cargar los costos de bizcocho, esmaltes, quemas y empaque, así que el precio sale por
+  DEBAJO del real. Nunca presentes el número como definitivo mientras haya advertencias.
+- Si no hay tiempo medido para ese tamaño y dificultad (L fácil, XL fácil, XL difícil),
+  el script avisa: pídele al usuario los minutos y pásalos en minutos_acabado.
+- El precio es SUGERIDO. La decisión de cobrar más o menos es de Camilo.
+- Los fijos se reparten entre 300 piezas/mes, no entre el pedido. Si preguntan por qué
+  un pedido chico no sale más caro, esa es la razón.
+
+────────────────────────────────────────
 MÓDULO COMPETENCIA
 ────────────────────────────────────────
 barrer_competencia(tipo, ciudad) → lee los precios públicos de la competencia y los
@@ -755,6 +803,19 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         if not resultado.startswith("Error"):
                             resultado += "\n" + registrar_cotizacion_hs(
                                 datos, paquete, inp.get("deal_id", ""))
+                    # ── Cotizador ───────────────────────────────────────────
+                    elif name == "calcular_precio":
+                        _dificultad = inp.get("dificultad", "")
+                        if not _dificultad and inp.get("pct_pintado") is not None:
+                            _dificultad = _grado_acabado(
+                                inp.get("pct_pintado", 0), inp.get("num_tintas", 1),
+                                inp.get("solo_relieve", False))
+                        try:
+                            resultado = _cot_formato(_cotizar(
+                                inp["cantidad"], inp["tamano"], _dificultad or "medio",
+                                inp.get("minutos_acabado"), producto=inp.get("producto", "")))
+                        except ValueError as e:
+                            resultado = f"No se pudo calcular: {e}"
                     # ── Competencia ─────────────────────────────────────────
                     elif name == "barrer_competencia":
                         _filas = _comp_barrer(inp.get("tipo", ""), inp.get("ciudad", ""))
