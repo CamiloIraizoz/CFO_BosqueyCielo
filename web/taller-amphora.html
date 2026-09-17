@@ -200,6 +200,29 @@
   .chip.atrasado { background:#F6E3E2; color:var(--crit); }
   :root[data-theme="dark"] .chip.atrasado, :root:not([data-theme="light"]) .chip.atrasado { background:#3A2624; }
 
+  /* Bitácora y pendientes */
+  .bloque { border-top:1px solid var(--line); padding-top:12px; }
+  .bloque-t { font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+              color:var(--muted); margin-bottom:9px; }
+  .bloque-alta { display:flex; gap:8px; align-items:center; margin-top:9px; }
+  .bloque-alta input { flex:1 1 auto; }
+  .btn.chiquito { padding:8px 13px; font-size:13.5px; white-space:nowrap; }
+  .icono.chico { width:26px; height:26px; font-size:12px; flex:0 0 26px; }
+  .bloque-vacio { color:var(--muted); font-size:12.5px; }
+
+  .bitacora { list-style:none; margin:0; padding:0; display:grid; gap:7px; }
+  .bitacora li { display:flex; gap:9px; font-size:13.5px; align-items:baseline; flex-wrap:wrap; }
+  .bitacora li b { color:var(--accent-deep); font-weight:500; font-size:12px;
+                   font-variant-numeric:tabular-nums; flex:0 0 auto; }
+  .bitacora li span { flex:1 1 200px; }
+  .bitacora li i { color:var(--muted); font-size:11.5px; font-style:normal; }
+
+  .tareas { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+  .tareas li { display:flex; gap:9px; align-items:center; font-size:14px; }
+  .tareas li label { flex:1 1 auto; cursor:pointer; }
+  .tareas li.hecha label { text-decoration:line-through; color:var(--muted); }
+  .tareas input[type="checkbox"] { width:auto; accent-color:var(--accent); }
+
   .vacio { text-align:center; color:var(--muted); padding:38px 20px;
            border:1px dashed var(--line); border-radius:var(--r); }
   .cargando { color:var(--muted); font-size:14px; padding:26px 0; }
@@ -219,6 +242,7 @@
       <div class="sub">Bosque y Cielo</div>
     </div>
     <div class="quien" id="quien"></div>
+    <div class="quien" id="estado" style="margin-left:0;"></div>
   </div>
   <div class="tabs" role="tablist">
     <button class="tab" id="tab-cotizador" role="tab" aria-selected="true" aria-controls="vista-cotizador">Cotizador</button>
@@ -463,6 +487,36 @@
   var proyectos = [];
   var nombres = {};
   var seq = 0;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Las capacidades de claude.ai (guardar, descargar, quién eres) no
+  // están listas cuando este script corre por primera vez: la plataforma
+  // inyecta window.claude después. Antes se preguntaba una sola vez al
+  // arrancar y, si todavía no estaba, la página se quedaba sin base y sin
+  // descargas para siempre — los botones no hacían nada.
+  // ───────────────────────────────────────────────────────────────────
+  var capacidades = {};
+
+  function esperarClaude() {
+    return new Promise(function (resolver) {
+      if (window.claude && window.claude.use) { resolver(window.claude); return; }
+      var desde = Date.now();
+      var reloj = setInterval(function () {
+        if (window.claude && window.claude.use) { clearInterval(reloj); resolver(window.claude); }
+        else if (Date.now() - desde > 12000) { clearInterval(reloj); resolver(null); }
+      }, 120);
+    });
+  }
+
+  function pedir(nombre) {
+    if (!capacidades[nombre]) {
+      capacidades[nombre] = esperarClaude().then(function (c) {
+        if (!c) return null;
+        return Promise.resolve(c.use(nombre)).catch(function () { return null; });
+      });
+    }
+    return capacidades[nombre];
+  }
 
   // ── Utilidades ────────────────────────────────────────────────────
   function $(id) { return document.getElementById(id); }
@@ -1197,23 +1251,30 @@
     });
     recalcular();
 
-    if (!db) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
     var copiaParams = {};
     Object.keys(PARAMS).forEach(function (k) { copiaParams[k] = PARAMS[k]; });
-    Promise.all([
-      db.doc("config/parametros").set(copiaParams),
-      db.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS)))
-    ]).then(function () {
-      toast("Ajustes guardados. Cuéntale al bot si cambiaste un costo.");
-    }).catch(function (e) {
-      if (e && e.code === "invalid_argument") {
-        puedeEscribir = false; pintarAjustes();
-        toast("No tienes permiso para cambiar los ajustes");
-      } else { toast("No se pudieron guardar los ajustes"); }
+    pedir("db").then(function (d) {
+      if (!d) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+      db = d;
+      return Promise.all([
+        d.doc("config/parametros").set(copiaParams),
+        d.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS)))
+      ]).then(function () {
+        toast("Ajustes guardados. Cuéntale al bot si cambiaste un costo.");
+      }).catch(function (e) {
+        if (e && e.code === "invalid_argument") {
+          puedeEscribir = false; pintarAjustes();
+          toast("No tienes permiso para cambiar los ajustes");
+        } else { toast("No se pudieron guardar los ajustes"); }
+      });
     });
   }
 
   // ── Producción ────────────────────────────────────────────────────
+  // El avance de un proyecto se ve de tres maneras: la barra (etapa + piezas),
+  // la bitácora (qué pasó cada día, quién lo anotó) y los pendientes.
+  var avances = [], tareas = [], borradores = {};
+
   function etapasDe(p) { return ETAPAS[p.proceso] || ETAPAS.bizcocho; }
 
   function avance(p) {
@@ -1224,12 +1285,47 @@
     return Math.min(1, (i + frac) / (etapas.length - 1));
   }
 
+  function diasDesde(iso) {
+    if (!iso) return null;
+    var t = new Date(iso).getTime();
+    if (!isFinite(t)) return null;
+    return Math.floor((Date.now() - t) / 86400000);
+  }
+
+  function haceCuanto(iso) {
+    var d = diasDesde(iso);
+    if (d === null) return "";
+    if (d <= 0) return "hoy";
+    if (d === 1) return "ayer";
+    return "hace " + d + " días";
+  }
+
+  function quien(id) { return id ? (nombres[id] || "alguien del equipo") : ""; }
+
+  function avancesDe(id) {
+    return avances.filter(function (a) { return a.proyecto_id === id; })
+                  .sort(function (a, b) { return String(b.creado_en).localeCompare(String(a.creado_en)); });
+  }
+
+  function tareasDe(id) {
+    return tareas.filter(function (t) { return t.proyecto_id === id; })
+                 .sort(function (a, b) {
+                   var x = (a.hecha ? 1 : 0) - (b.hecha ? 1 : 0);
+                   return x || String(a.creado_en).localeCompare(String(b.creado_en));
+                 });
+  }
+
   function pintarProyectos() {
     var cont = $("lista-proyectos");
-    cont.innerHTML = "";
+    // Se redibuja entero en cada cambio; hay que devolver el foco o se pierde
+    // lo que la persona estaba escribiendo.
+    var foco = document.activeElement && document.activeElement.id;
+    cont.textContent = "";
     if (!proyectos.length) {
-      cont.innerHTML = '<div class="vacio">Todavía no hay proyectos. Agrega el primero arriba, ' +
-                       'o regístralo por Telegram y aparecerá acá.</div>';
+      var v = document.createElement("div"); v.className = "vacio";
+      v.textContent = "Todavía no hay proyectos. Agrega el primero arriba, o regístralo por " +
+                      "Telegram y aparecerá acá.";
+      cont.appendChild(v);
       return;
     }
     var orden = proyectos.slice().sort(function (a, b) {
@@ -1237,30 +1333,48 @@
       return String(a.fecha_entrega || "9999").localeCompare(String(b.fecha_entrega || "9999"));
     });
     orden.forEach(function (p) { cont.appendChild(tarjetaProyecto(p)); });
+
+    if (foco) {
+      var vuelve = document.getElementById(foco);
+      if (vuelve && vuelve.focus) {
+        vuelve.focus();
+        if (vuelve.setSelectionRange && vuelve.type === "text") {
+          var n = vuelve.value.length;
+          try { vuelve.setSelectionRange(n, n); } catch (e) {}
+        }
+      }
+    }
   }
 
   function tarjetaProyecto(p) {
     var etapas = etapasDe(p), pct = Math.round(avance(p) * 100);
+    var entregado = p.etapa === "entregado";
     var card = document.createElement("div");
-    card.className = "proyecto" + (p.etapa === "entregado" ? " entregado" : "");
+    card.className = "proyecto" + (entregado ? " entregado" : "");
 
     var top = document.createElement("div"); top.className = "p-top";
     var izq = document.createElement("div");
-    var cli = document.createElement("div"); cli.className = "p-cliente"; cli.textContent = p.cliente || "Sin cliente";
-    var des = document.createElement("div"); des.className = "p-desc"; des.textContent = p.descripcion || "";
+    var cli = document.createElement("div"); cli.className = "p-cliente";
+    cli.textContent = p.cliente || "Sin cliente";
+    var des = document.createElement("div"); des.className = "p-desc";
+    des.textContent = p.descripcion || "";
     izq.appendChild(cli); izq.appendChild(des);
     var num = document.createElement("div"); num.className = "p-pct num"; num.textContent = pct + "%";
     top.appendChild(izq); top.appendChild(num);
     card.appendChild(top);
 
     var barra = document.createElement("div"); barra.className = "barra";
-    var i = document.createElement("i"); i.style.width = pct + "%"; barra.appendChild(i);
+    var relleno = document.createElement("i"); relleno.style.width = pct + "%";
+    barra.appendChild(relleno);
     card.appendChild(barra);
 
+    // ── Etapa y piezas
     var ctrl = document.createElement("div"); ctrl.className = "p-ctrl";
 
-    var lEtapa = document.createElement("label"); lEtapa.className = "campo"; lEtapa.style.marginBottom = "0";
-    lEtapa.innerHTML = "<span>Etapa</span>";
+    var lEtapa = document.createElement("label"); lEtapa.className = "campo";
+    lEtapa.style.marginBottom = "0";
+    var sEtapa = document.createElement("span"); sEtapa.textContent = "Etapa";
+    lEtapa.appendChild(sEtapa);
     var sel = document.createElement("select");
     sel.id = "etapa-" + p.id;
     etapas.forEach(function (e) {
@@ -1270,12 +1384,17 @@
     });
     sel.disabled = puedeEscribir === false;
     sel.addEventListener("change", function () {
-      guardarProyecto(p.id, { etapa:sel.value, piezas_listas: sel.value === "entregado" ? p.cantidad : 0 });
+      var listas = sel.value === "entregado" ? p.cantidad : 0;
+      guardarProyecto(p.id, { etapa:sel.value, piezas_listas:listas },
+                      sel.value === "entregado" ? "Pedido entregado" : "Pasó a " + sel.value);
     });
     lEtapa.appendChild(sel); ctrl.appendChild(lEtapa);
 
-    var lPiezas = document.createElement("label"); lPiezas.className = "campo"; lPiezas.style.marginBottom = "0";
-    lPiezas.innerHTML = "<span>Piezas que ya pasaron esta etapa</span>";
+    var lPiezas = document.createElement("label"); lPiezas.className = "campo";
+    lPiezas.style.marginBottom = "0";
+    var sPiezas = document.createElement("span");
+    sPiezas.textContent = "Piezas que ya pasaron esta etapa";
+    lPiezas.appendChild(sPiezas);
     var inp = document.createElement("input");
     inp.type = "number"; inp.min = "0"; inp.max = String(p.cantidad); inp.className = "num";
     inp.id = "piezas-" + p.id;
@@ -1284,44 +1403,253 @@
     inp.addEventListener("change", function () {
       var v = Math.max(0, Math.min(p.cantidad, parseInt(inp.value, 10) || 0));
       inp.value = v;
-      guardarProyecto(p.id, { piezas_listas:v });
+      guardarProyecto(p.id, { piezas_listas:v },
+                      v + " de " + p.cantidad + " piezas en " + p.etapa);
     });
     lPiezas.appendChild(inp); ctrl.appendChild(lPiezas);
     card.appendChild(ctrl);
 
+    // ── Chips
     var meta = document.createElement("div"); meta.className = "p-meta";
     var chip = document.createElement("span"); chip.className = "chip";
     chip.textContent = p.cantidad + " piezas";
     meta.appendChild(chip);
     if (p.fecha_entrega) {
-      var atrasado = p.etapa !== "entregado" && p.fecha_entrega < hoyISO();
+      var atrasado = !entregado && p.fecha_entrega < hoyISO();
       var c2 = document.createElement("span");
       c2.className = "chip" + (atrasado ? " atrasado" : "");
       c2.textContent = (atrasado ? "venció " : "entrega ") + fechaCorta(p.fecha_entrega);
       meta.appendChild(c2);
     }
-    if (p.actualizado_por) {
-      var q = document.createElement("span");
-      q.textContent = "último toque: " + (nombres[p.actualizado_por] || "alguien del equipo");
-      meta.appendChild(q);
+    var dias = diasDesde(p.actualizado_en);
+    if (!entregado && dias !== null && dias >= 3) {
+      var c3 = document.createElement("span"); c3.className = "chip atrasado";
+      c3.textContent = "sin novedad " + haceCuanto(p.actualizado_en);
+      meta.appendChild(c3);
+    } else if (p.actualizado_en) {
+      var c4 = document.createElement("span");
+      c4.textContent = "actualizado " + haceCuanto(p.actualizado_en) +
+                       (p.actualizado_por ? " · " + quien(p.actualizado_por) : "");
+      meta.appendChild(c4);
     }
     card.appendChild(meta);
+
+    card.appendChild(bloqueBitacora(p));
+    card.appendChild(bloqueTareas(p));
     return card;
   }
 
-  function guardarProyecto(id, cambios) {
+  // ── Bitácora: qué pasó hoy ────────────────────────────────────────
+  function bloqueBitacora(p) {
+    var caja = document.createElement("div"); caja.className = "bloque";
+    var titulo = document.createElement("div"); titulo.className = "bloque-t";
+    titulo.textContent = "Bitácora";
+    caja.appendChild(titulo);
+
+    if (puedeEscribir !== false) {
+      var fila = document.createElement("div"); fila.className = "bloque-alta";
+      var campo = document.createElement("input");
+      campo.type = "text"; campo.id = "nota-" + p.id;
+      campo.placeholder = "¿Qué se avanzó hoy?";
+      campo.autocomplete = "off";
+      campo.value = borradores["nota-" + p.id] || "";
+      campo.addEventListener("input", function () { borradores["nota-" + p.id] = campo.value; });
+      var boton = document.createElement("button");
+      boton.type = "button"; boton.className = "btn sec chiquito";
+      boton.textContent = "Anotar";
+      function anotar() {
+        var texto = limpio(campo.value);
+        if (!texto) { toast("Escribe qué pasó y le doy anotar"); return; }
+        campo.value = ""; borradores["nota-" + p.id] = "";
+        registrarAvance(p, texto);
+      }
+      campo.addEventListener("keydown", function (e) { if (e.key === "Enter") anotar(); });
+      boton.addEventListener("click", anotar);
+      fila.appendChild(campo); fila.appendChild(boton);
+      caja.appendChild(fila);
+    }
+
+    var lista = avancesDe(p.id);
+    if (!lista.length) {
+      var vacia = document.createElement("div"); vacia.className = "bloque-vacio";
+      vacia.textContent = "Sin anotaciones todavía.";
+      caja.appendChild(vacia);
+      return caja;
+    }
+    var ul = document.createElement("ul"); ul.className = "bitacora";
+    lista.slice(0, 4).forEach(function (a) {
+      var li = document.createElement("li");
+      var cuando = document.createElement("b");
+      cuando.textContent = fechaCorta(a.fecha || a.creado_en);
+      var texto = document.createElement("span"); texto.textContent = a.texto;
+      li.appendChild(cuando); li.appendChild(texto);
+      if (a.autor) {
+        var q = document.createElement("i"); q.textContent = quien(a.autor);
+        li.appendChild(q);
+      }
+      ul.appendChild(li);
+    });
+    caja.appendChild(ul);
+    if (lista.length > 4) {
+      var mas = document.createElement("div"); mas.className = "bloque-vacio";
+      mas.textContent = "y " + (lista.length - 4) + " anotaciones más";
+      caja.appendChild(mas);
+    }
+    return caja;
+  }
+
+  function registrarAvance(p, texto, automatico) {
+    var fila = { proyecto_id:p.id, texto:texto, fecha:hoyISO(),
+                 creado_en:new Date().toISOString(), automatico: !!automatico };
+    if (miId) fila.autor = miId;
+    // Se pinta de una para que se sienta inmediato; el snapshot lo reemplaza.
+    var local = { id:"local-" + Date.now() };
+    Object.keys(fila).forEach(function (k) { local[k] = fila[k]; });
+    avances.push(local);
+    if (!automatico) {
+      var cambios = { actualizado_en: fila.creado_en };
+      if (miId) cambios.actualizado_por = miId;
+      var proyecto = proyectos.filter(function (x) { return x.id === p.id; })[0];
+      if (proyecto) { proyecto.actualizado_en = cambios.actualizado_en;
+                      proyecto.actualizado_por = cambios.actualizado_por; }
+      pedir("db").then(function (d) {
+        if (d) d.doc("proyectos/" + p.id).update(cambios).catch(function () {});
+      });
+    }
+    pintarProyectos();
+    pedir("db").then(function (d) {
+      if (!d) { toast("Anotado solo en esta pantalla: no hay conexión con la base"); return; }
+      db = d;
+      return d.collection("avances").add(fila).catch(function (e) {
+        toast(e && e.code === "invalid_argument"
+              ? "No tienes permiso para anotar en la bitácora"
+              : "No se pudo guardar la anotación");
+      });
+    });
+  }
+
+  // ── Pendientes ────────────────────────────────────────────────────
+  function bloqueTareas(p) {
+    var caja = document.createElement("div"); caja.className = "bloque";
+    var lista = tareasDe(p.id);
+    var faltan = lista.filter(function (t) { return !t.hecha; }).length;
+
+    var titulo = document.createElement("div"); titulo.className = "bloque-t";
+    titulo.textContent = "Pendientes" + (faltan ? " · " + faltan + " por hacer" : "");
+    caja.appendChild(titulo);
+
+    var ul = document.createElement("ul"); ul.className = "tareas";
+    lista.forEach(function (t) {
+      var li = document.createElement("li");
+      if (t.hecha) li.className = "hecha";
+      var marca = document.createElement("input");
+      marca.type = "checkbox"; marca.checked = !!t.hecha;
+      marca.id = "tarea-" + t.id;
+      marca.disabled = puedeEscribir === false;
+      marca.addEventListener("change", function () { marcarTarea(t, marca.checked); });
+      var texto = document.createElement("label");
+      texto.setAttribute("for", "tarea-" + t.id);
+      texto.textContent = t.texto;
+      li.appendChild(marca); li.appendChild(texto);
+      if (puedeEscribir !== false) {
+        var quitar = document.createElement("button");
+        quitar.type = "button"; quitar.className = "icono chico";
+        quitar.textContent = "✕"; quitar.title = "Quitar pendiente";
+        quitar.setAttribute("aria-label", "Quitar pendiente");
+        quitar.addEventListener("click", function () { borrarTarea(t); });
+        li.appendChild(quitar);
+      }
+      ul.appendChild(li);
+    });
+    caja.appendChild(ul);
+
+    if (puedeEscribir !== false) {
+      var fila = document.createElement("div"); fila.className = "bloque-alta";
+      var campo = document.createElement("input");
+      campo.type = "text"; campo.id = "tarea-nueva-" + p.id;
+      campo.placeholder = "Agregar un pendiente";
+      campo.autocomplete = "off";
+      campo.value = borradores["tarea-nueva-" + p.id] || "";
+      campo.addEventListener("input", function () { borradores[campo.id] = campo.value; });
+      var boton = document.createElement("button");
+      boton.type = "button"; boton.className = "btn fantasma chiquito";
+      boton.textContent = "Agregar";
+      function agregar() {
+        var texto = limpio(campo.value);
+        if (!texto) return;
+        campo.value = ""; borradores[campo.id] = "";
+        agregarTarea(p, texto);
+      }
+      campo.addEventListener("keydown", function (e) { if (e.key === "Enter") agregar(); });
+      boton.addEventListener("click", agregar);
+      fila.appendChild(campo); fila.appendChild(boton);
+      caja.appendChild(fila);
+    }
+    return caja;
+  }
+
+  function agregarTarea(p, texto) {
+    var fila = { proyecto_id:p.id, texto:texto, hecha:false,
+                 creado_en:new Date().toISOString() };
+    if (miId) fila.autor = miId;
+    var local = { id:"local-" + Date.now() };
+    Object.keys(fila).forEach(function (k) { local[k] = fila[k]; });
+    tareas.push(local);
+    pintarProyectos();
+    pedir("db").then(function (d) {
+      if (!d) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+      db = d;
+      return d.collection("tareas").add(fila).catch(function () {
+        toast("No se pudo guardar el pendiente");
+      });
+    });
+  }
+
+  function marcarTarea(t, hecha) {
+    t.hecha = hecha;
+    t.hecha_en = hecha ? new Date().toISOString() : "";
+    if (miId) t.hecha_por = hecha ? miId : "";
+    pintarProyectos();
+    if (String(t.id).indexOf("local-") === 0) return;
+    pedir("db").then(function (d) {
+      if (!d) return;
+      db = d;
+      return d.doc("tareas/" + t.id)
+              .update({ hecha:hecha, hecha_en:t.hecha_en, hecha_por:t.hecha_por || "" })
+              .catch(function () { toast("No se pudo guardar el cambio"); });
+    });
+  }
+
+  function borrarTarea(t) {
+    tareas = tareas.filter(function (x) { return x.id !== t.id; });
+    pintarProyectos();
+    if (String(t.id).indexOf("local-") === 0) return;
+    pedir("db").then(function (d) {
+      if (d) d.doc("tareas/" + t.id).delete().catch(function () {});
+    });
+  }
+
+  function guardarProyecto(id, cambios, nota) {
     var local = proyectos.filter(function (p) { return p.id === id; })[0];
-    if (local) { Object.keys(cambios).forEach(function (k) { local[k] = cambios[k]; }); pintarProyectos(); }
-    if (!db) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+    if (local) { Object.keys(cambios).forEach(function (k) { local[k] = cambios[k]; }); }
     cambios.actualizado_en = new Date().toISOString();
     if (miId) cambios.actualizado_por = miId;
-    db.doc("proyectos/" + id).update(cambios).catch(function (e) {
-      if (e && e.code === "invalid_argument") {
-        puedeEscribir = false; pintarProyectos();
-        toast("No tienes permiso para cambiar los proyectos");
-      } else {
-        toast("No se pudo guardar el cambio");
-      }
+    if (local) { local.actualizado_en = cambios.actualizado_en;
+                 local.actualizado_por = cambios.actualizado_por; }
+    if (local && nota) registrarAvance(local, nota, true);
+    else pintarProyectos();
+
+    pedir("db").then(function (d) {
+      if (!d) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+      db = d;
+      return d.doc("proyectos/" + id).update(cambios).catch(function (e) {
+        if (e && e.code === "invalid_argument") {
+          puedeEscribir = false; pintarProyectos();
+          toast("No tienes permiso para cambiar los proyectos");
+        } else {
+          toast("No se pudo guardar el cambio");
+        }
+      });
     });
   }
 
@@ -1371,20 +1699,26 @@
       if (!salida) return;
       var nombre = "Cotizacion_" + salida.numero +
         (ultimo.cliente ? "_" + ultimo.cliente.replace(/[^A-Za-z0-9]+/g, "_") : "") + ".pdf";
-      if (downloads) {
-        downloads.save({ filename:nombre, data:salida.doc.output("arraybuffer") })
-          .then(function () { toast("PDF listo"); })
-          .catch(function () { toast("La descarga no se completó"); });
-      } else {
-        salida.doc.save(nombre);   // fuera del visor de Claude sí funciona
-        toast("Si no se descargó, ábrela en Claude para bajar el PDF");
-      }
+      var datos = salida.doc.output("arraybuffer");
+      toast("Armando el PDF…");
+      pedir("downloads").then(function (d) {
+        downloads = d;
+        if (!d) {
+          salida.doc.save(nombre);   // fuera del visor de Claude sí funciona
+          toast("Si no se descargó, ábrela desde claude.ai");
+          return;
+        }
+        return d.save({ filename:nombre, data:datos })
+          .then(function () { toast("PDF listo: " + nombre); })
+          .catch(function (e) {
+            toast("La descarga no se completó" + (e && e.code ? " (" + e.code + ")" : ""));
+          });
+      });
     });
 
     $("b-guardar").addEventListener("click", function () {
       var r = ultimo;
       if (!r || !r.buenas.length) return;
-      if (!db) { toast("No hay conexión con la base: la cotización no se guardó"); return; }
       var doc = {
         fecha: hoyISO(), numero: r.numero, cliente: r.cliente, contacto: r.contacto,
         piezas: r.piezas, referencias: r.buenas.length,
@@ -1402,14 +1736,18 @@
         total: Math.round(r.total), creado_en: new Date().toISOString()
       };
       if (miId) doc.creado_por = miId;
-      db.collection("cotizaciones").add(doc)
-        .then(function () { toast("Cotización " + r.numero + " guardada"); })
-        .catch(function (e) {
-          if (e && e.code === "invalid_argument") {
-            puedeEscribir = false; $("b-guardar").disabled = true;
-            toast("No tienes permiso para guardar cotizaciones");
-          } else { toast("No se pudo guardar"); }
-        });
+      pedir("db").then(function (d) {
+        if (!d) { toast("No hay conexión con la base: la cotización no se guardó"); return; }
+        db = d;
+        return d.collection("cotizaciones").add(doc)
+          .then(function () { toast("Cotización " + r.numero + " guardada"); })
+          .catch(function (e) {
+            if (e && e.code === "invalid_argument") {
+              puedeEscribir = false; $("b-guardar").disabled = true;
+              toast("No tienes permiso para guardar cotizaciones");
+            } else { toast("No se pudo guardar" + (e && e.code ? " (" + e.code + ")" : "")); }
+          });
+      });
     });
 
     $("b-guardar-ajustes").addEventListener("click", guardarAjustes);
@@ -1432,20 +1770,23 @@
         actualizado_en: new Date().toISOString()
       };
       if (miId) nuevo.actualizado_por = miId;
-      if (!db) {
-        nuevo.id = "local-" + Date.now();
-        proyectos.push(nuevo); pintarProyectos();
-        toast("Guardado solo en esta pantalla: no hay conexión con la base");
-        return;
-      }
-      db.collection("proyectos").add(nuevo).then(function () {
-        $("n-cliente").value = ""; $("n-desc").value = "";
-        toast("Proyecto agregado");
-      }).catch(function (e) {
-        if (e && e.code === "invalid_argument") {
-          puedeEscribir = false; pintarProyectos();
-          toast("No tienes permiso para agregar proyectos");
-        } else { toast("No se pudo agregar"); }
+      pedir("db").then(function (d) {
+        if (!d) {
+          nuevo.id = "local-" + Date.now();
+          proyectos.push(nuevo); pintarProyectos();
+          toast("Guardado solo en esta pantalla: no hay conexión con la base");
+          return;
+        }
+        db = d;
+        return d.collection("proyectos").add(nuevo).then(function () {
+          $("n-cliente").value = ""; $("n-desc").value = "";
+          toast("Proyecto agregado");
+        }).catch(function (e) {
+          if (e && e.code === "invalid_argument") {
+            puedeEscribir = false; pintarProyectos();
+            toast("No tienes permiso para agregar proyectos");
+          } else { toast("No se pudo agregar" + (e && e.code ? " (" + e.code + ")" : "")); }
+        });
       });
     });
 
@@ -1468,12 +1809,16 @@
     } catch (e) {}
   }
 
+  function marcarEstado(texto, mal) {
+    var e = $("estado");
+    e.textContent = texto;
+    e.style.color = mal ? "var(--crit)" : "var(--muted)";
+  }
+
   function conectarCapacidades() {
-    if (!window.claude || !window.claude.use) return;
+    pedir("downloads").then(function (d) { downloads = d; });
 
-    window.claude.use("downloads").then(function (d) { downloads = d; }).catch(function () {});
-
-    window.claude.use("user").then(function (u) {
+    pedir("user").then(function (u) {
       if (!u) return;
       user = u;
       Promise.resolve(u.can ? u.can("data.write") : null).then(function (puede) {
@@ -1486,14 +1831,21 @@
         } else if (puede === true) { puedeEscribir = true; }
       }).catch(function () {});
       Promise.resolve(u.id ? u.id() : null).then(function (id) { miId = id || null; }).catch(function () {});
+      // Si la base respondió antes que el usuario, los nombres quedaron sin resolver.
+      resolverNombres();
       Promise.resolve(u.me ? u.me() : null).then(function (yo) {
         if (yo && yo.name) $("quien").textContent = "Hola, " + yo.name.split(" ")[0];
       }).catch(function () {});
-    }).catch(function () {});
+    });
 
-    window.claude.use("db").then(function (d) {
-      if (!d) { pintarProyectos(); return; }
+    pedir("db").then(function (d) {
+      if (!d) {
+        marcarEstado("sin conexión con la base — lo que escribas no se guarda", true);
+        pintarProyectos();
+        return;
+      }
       db = d;
+      marcarEstado("");
 
       d.doc("config/parametros").onSnapshot(function (snap) {
         if (snap.exists) {
@@ -1524,20 +1876,47 @@
           return body;
         });
         pintarProyectos();
-        var ids = proyectos.map(function (p) { return p.actualizado_por; })
-                           .filter(function (x) { return !!x; });
-        if (ids.length && user && user.profiles) {
-          user.profiles(ids).then(function (ps) {
-            Object.keys(ps || {}).forEach(function (id) {
-              nombres[id] = (ps[id] && ps[id].name) || "";
-            });
-            pintarProyectos();
-          }).catch(function () {});
-        }
+        resolverNombres();
       }, function () {
         $("lista-proyectos").innerHTML = '<div class="vacio">No se pudieron cargar los proyectos.</div>';
       });
-    }).catch(function () { pintarProyectos(); });
+
+      d.collection("avances").limit(500).onSnapshot(function (snap) {
+        avances = snap.docs.map(function (doc) {
+          var body = doc.data() || {};
+          body.id = doc.id;
+          return body;
+        });
+        pintarProyectos();
+        resolverNombres();
+      }, function () {});
+
+      d.collection("tareas").limit(300).onSnapshot(function (snap) {
+        tareas = snap.docs.map(function (doc) {
+          var body = doc.data() || {};
+          body.id = doc.id;
+          return body;
+        });
+        pintarProyectos();
+      }, function () {});
+    });
+  }
+
+  // Los nombres se resuelven en cada render: la capacidad los cachea, así que
+  // volver a pedirlos es correcto y guardarlos a mano se quedaría viejo.
+  function resolverNombres() {
+    if (!user || !user.profiles) return;
+    var ids = {};
+    proyectos.forEach(function (p) { if (p.actualizado_por) ids[p.actualizado_por] = 1; });
+    avances.forEach(function (a) { if (a.autor) ids[a.autor] = 1; });
+    var lista = Object.keys(ids).filter(function (id) { return !(id in nombres); });
+    if (!lista.length) return;
+    user.profiles(lista).then(function (ps) {
+      Object.keys(ps || {}).forEach(function (id) {
+        nombres[id] = (ps[id] && ps[id].name) || "";
+      });
+      pintarProyectos();
+    }).catch(function () {});
   }
 
   cot = leerBorrador() || cotizacionNueva();
@@ -1545,9 +1924,7 @@
   conectarAcciones();
   pintarItems();
   pintarAjustes();
+  pintarProyectos();
   conectarCapacidades();
-  setTimeout(function () {
-    if (!db && !proyectos.length) pintarProyectos();
-  }, 11000);
 })();
 </script>
