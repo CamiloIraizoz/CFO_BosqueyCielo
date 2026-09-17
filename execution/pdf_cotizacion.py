@@ -4,21 +4,29 @@ Generación de cotizaciones en PDF (Bosque y Cielo / Pottery Lab).
 
 Usa xhtml2pdf (puro Python, sin dependencias de sistema). El HTML de este módulo
 NO es el mismo de email_sender.py: xhtml2pdf no soporta tablas anidadas con
-padding ni border-radius, así que aquí se usa un layout plano de tablas simples.
+padding ni border-radius.
+
+Dos reglas que vienen de pelearse con el motor y conviene no romper:
+  1. El contenido de cada celda va en UN SOLO bloque con <br/>. Si se ponen
+     varios divs hermanos, xhtml2pdf los reparte verticalmente para llenar la
+     celda y el texto queda flotando con huecos enormes.
+  2. Las tablas no se anidan dentro de celdas: se desalinean.
+
+Tipografías: solo las base de PDF. 'Times' hace de serif de marca (el email usa
+Georgia) y 'Helvetica' del resto.
 """
 import io
 
-BYC_ROSA   = "#C07082"
-BYC_CREMA  = "#F0E8E5"
-BYC_TEXTO  = "#3a2a27"
-BYC_SUAVE  = "#9a7a74"
-BYC_LINEA  = "#EAE0DC"
-
-PL_BARRO   = "#8E8275"
-PL_ARENA   = "#F5F0E8"
-PL_TEXTO   = "#3D332C"
-PL_SUAVE   = "#7A6E64"
-PL_LINEA   = "#DDD5CC"
+# Bosque y Cielo — productos
+BYC = {
+    "acento": "#C07082", "acento_suave": "#F6ECEF", "crema": "#F0E8E5",
+    "texto": "#3a2a27", "suave": "#9a7a74", "linea": "#EAE0DC", "sobre_acento": "#FBEFF2",
+}
+# Pottery Lab — experiencias
+PL = {
+    "acento": "#8E8275", "acento_suave": "#EFE8DD", "crema": "#F5F0E8",
+    "texto": "#3D332C", "suave": "#7A6E64", "linea": "#DDD5CC", "sobre_acento": "#F5F0E8",
+}
 
 
 def _fmt(value) -> str:
@@ -32,91 +40,133 @@ def _esc(texto) -> str:
     return (str(texto).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-def _base_css(acento: str, crema: str, texto: str, suave: str, linea: str) -> str:
+def _css(p: dict) -> str:
     return f"""
     @page {{
       size: a4 portrait;
-      margin: 1.4cm 1.5cm 1.8cm 1.5cm;
+      margin: 1.5cm 1.6cm 2cm 1.6cm;
       @frame footer {{
         -pdf-frame-content: pie_pagina;
-        bottom: 0.7cm; left: 1.5cm; width: 18cm; height: 1cm;
+        bottom: 0.9cm; left: 1.6cm; width: 17.8cm; height: 1.2cm;
       }}
     }}
-    body  {{ font-family: Helvetica; font-size: 9pt; color: {texto}; }}
-    .cab           {{ background-color: {acento}; color: white; padding: 12pt 14pt; }}
-    .marca         {{ font-size: 17pt; }}
-    .marca-sub     {{ font-size: 7pt; color: #F3E3E6; }}
-    .cab-datos     {{ font-size: 7.5pt; color: #F3E3E6; text-align: right; }}
-    .barra         {{ background-color: {crema}; padding: 9pt 14pt; }}
-    .titulo        {{ font-size: 16pt; color: {texto}; }}
-    .meta-label    {{ font-size: 6.5pt; color: {suave}; text-align: right; }}
-    .meta-valor    {{ font-size: 9pt; color: {acento}; text-align: right; }}
-    .caja          {{ border: 1px solid {linea}; padding: 8pt 10pt; }}
-    .caja-titulo   {{ font-size: 8pt; color: {acento}; padding-bottom: 5pt; }}
-    .campo         {{ padding: 1.5pt 0; }}
-    .campo-label   {{ font-size: 6.5pt; color: {suave}; padding: 1pt 0; }}
-    .campo-valor   {{ font-size: 8.5pt; color: {texto}; padding: 1pt 0; }}
-    .seccion       {{ font-size: 11pt; color: {texto}; padding: 12pt 0 5pt 0; }}
-    .th            {{ background-color: {acento}; color: white; font-size: 7pt; padding: 6pt 8pt; }}
-    .td            {{ font-size: 8.5pt; padding: 6pt 8pt; border-bottom: 1px solid {linea}; }}
-    .td-desc       {{ font-size: 7.5pt; color: {suave}; }}
-    .total-fila    {{ background-color: {acento}; color: white; font-size: 11pt; padding: 8pt; }}
-    .nota          {{ background-color: {crema}; padding: 8pt 10pt; font-size: 8pt; }}
-    .nota-titulo   {{ font-size: 6.5pt; color: {acento}; padding-bottom: 3pt; }}
-    .pie           {{ font-size: 7pt; color: {suave}; text-align: center; }}
-    .der           {{ text-align: right; }}
-    .cen           {{ text-align: center; }}
+    body            {{ font-family: Helvetica; font-size: 9pt; color: {p['texto']}; }}
+
+    /* Cabecera */
+    .cab            {{ background-color: {p['acento']}; padding: 15pt 16pt;
+                       vertical-align: top; }}
+    .marca          {{ font-family: Times; font-size: 20pt; color: white; }}
+    .marca-sub      {{ font-family: Helvetica; font-size: 7pt; color: {p['sobre_acento']}; }}
+    .cab-datos      {{ font-size: 7.5pt; color: {p['sobre_acento']}; text-align: right;
+                       line-height: 1.6; padding: 15pt 16pt; vertical-align: top;
+                       background-color: {p['acento']}; }}
+
+    /* Barra de título */
+    .barra          {{ background-color: {p['crema']}; padding: 11pt 16pt;
+                       vertical-align: top; }}
+    .titulo         {{ font-family: Times; font-size: 18pt; color: {p['texto']}; }}
+    .meta           {{ background-color: {p['crema']}; padding: 11pt 8pt; text-align: right;
+                       font-size: 6.5pt; color: {p['suave']}; line-height: 1.5;
+                       vertical-align: top; }}
+    .meta-valor     {{ font-family: Helvetica; font-size: 9.5pt; color: {p['acento']}; }}
+
+    /* Cajas de datos: un solo bloque por celda, ver docstring */
+    .caja           {{ border: 1px solid {p['linea']}; padding: 11pt 13pt;
+                       vertical-align: top; }}
+    .caja-cuerpo    {{ line-height: 1.75; }}
+    .caja-titulo    {{ font-family: Times; font-size: 9.5pt; color: {p['acento']}; }}
+    .campo-label    {{ font-size: 6.5pt; color: {p['suave']}; }}
+    .campo-valor    {{ font-size: 9pt; color: {p['texto']}; }}
+
+    /* Tabla */
+    .seccion        {{ font-family: Times; font-size: 12.5pt; color: {p['texto']};
+                       padding: 16pt 0 6pt 0; }}
+    .th             {{ background-color: {p['acento']}; color: white; font-size: 6.5pt;
+                       padding: 7pt 10pt; }}
+    .td             {{ font-size: 9pt; padding: 8pt 10pt; border-bottom: 1px solid {p['linea']};
+                       line-height: 1.5; }}
+    .td-desc        {{ font-size: 7.5pt; color: {p['suave']}; }}
+    .td-extra       {{ font-size: 8.5pt; color: {p['suave']}; padding: 6pt 10pt;
+                       border-bottom: 1px solid {p['linea']}; }}
+    .anticipo       {{ background-color: {p['acento_suave']}; font-size: 8.5pt;
+                       color: {p['texto']}; padding: 7pt 10pt; }}
+    .total          {{ background-color: {p['acento']}; color: white; font-family: Times;
+                       font-size: 13pt; padding: 11pt 10pt; }}
+
+    /* Notas y pie */
+    .nota           {{ background-color: {p['crema']}; padding: 10pt 13pt;
+                       font-size: 8.5pt; line-height: 1.6; }}
+    .nota-titulo    {{ font-size: 6.5pt; color: {p['acento']}; }}
+    .pie            {{ font-size: 7pt; color: {p['suave']}; text-align: center; line-height: 1.7; }}
+    .pie-frase      {{ font-family: Times; font-size: 8.5pt; color: {p['acento']}; }}
+    .espacio        {{ height: 14pt; }}
+    .espacio-corto  {{ height: 10pt; }}
+    .der            {{ text-align: right; }}
+    .cen            {{ text-align: center; }}
     """
 
 
-def _cabecera(acento, crema, texto, suave, marca_html, contacto_html, numero, fecha) -> str:
+def _caja(titulo: str, pares: list) -> str:
+    """Caja de label/valor en UN bloque: evita el reparto vertical de xhtml2pdf."""
+    lineas = [f'<span class="caja-titulo">{titulo}</span>', ""]
+    llena = False
+    for label, valor in pares:
+        if not valor:
+            continue
+        llena = True
+        etiqueta = f'<span class="campo-label">{label.upper()}</span>' if label else ""
+        # Un valor largo en la misma línea que su etiqueta se parte feo: va debajo.
+        separador = "<br/>" if len(str(valor)) > 24 else " &nbsp;"
+        lineas.append(f'{etiqueta}{separador if etiqueta else ""}'
+                      f'<span class="campo-valor">{_esc(valor)}</span>')
+    if not llena:
+        lineas.append('<span class="campo-valor">Sin datos</span>')
+    return f'<div class="caja-cuerpo">{"<br/>".join(lineas)}</div>'
+
+
+def _encabezado(p: dict, marca: str, sub: str, contacto: str, numero: str, fecha: str) -> str:
     return f"""
     <table width="100%" cellpadding="0" cellspacing="0">
-      <tr valign="top"><td class="cab" width="55%">{marca_html}</td>
-          <td class="cab cab-datos" width="45%">{contacto_html}</td></tr>
+      <tr>
+        <td class="cab" width="52%">
+          <div><span class="marca">{marca}</span><br/><span class="marca-sub">{sub}</span></div>
+        </td>
+        <td class="cab-datos" width="48%"><div>{contacto}</div></td>
+      </tr>
     </table>
     <table width="100%" cellpadding="0" cellspacing="0">
-      <tr valign="top">
-        <td class="barra titulo" width="55%">Cotización</td>
-        <td class="barra meta-label" width="23%">N° COTIZACIÓN<br/>
-            <span class="meta-valor">{_esc(numero)}</span></td>
-        <td class="barra meta-label" width="22%">FECHA<br/>
-            <span class="meta-valor">{_esc(fecha)}</span></td>
+      <tr>
+        <td class="barra titulo" width="56%">Cotización</td>
+        <td class="meta" width="26%">
+          <div>N° COTIZACIÓN<br/><span class="meta-valor">{_esc(numero)}</span></div>
+        </td>
+        <td class="meta" width="18%">
+          <div>FECHA<br/><span class="meta-valor">{_esc(fecha)}</span></div>
+        </td>
       </tr>
     </table>
     """
 
 
-def _campos(titulo: str, pares: list) -> str:
-    """Caja de label/valor apilados. Sin tablas anidadas: xhtml2pdf las desalinea."""
-    bloque = f'<div class="caja-titulo">{titulo}</div>'
-    vacio = True
-    for label, val in pares:
-        if val:
-            vacio = False
-            bloque += (f'<div class="campo"><span class="campo-label">{label.upper()}</span>'
-                       f'&nbsp; <span class="campo-valor">{_esc(val)}</span></div>')
-    if vacio:
-        bloque += '<div class="campo-valor">Sin datos</div>'
-    return bloque
-
-
-def _bloque_cliente(cliente: dict) -> str:
-    return _campos("CLIENTE", [
-        ("Contacto", cliente.get("nombre", "")),
-        ("Empresa",  cliente.get("empresa", "")),
-        ("Celular",  cliente.get("telefono", "")),
-        ("Correo",   cliente.get("email", "")),
-    ])
-
-
-def _pie(acento, frase, correo_pie) -> str:
+def _pie(frase: str) -> str:
     return f"""
     <div id="pie_pagina" class="pie">
-      <i>{frase}</i><br/>
-      Precios en pesos colombianos (COP) · {correo_pie} · 310 492 5416 · NIT 901.481.694-2
+      <span class="pie-frase"><i>{frase}</i></span><br/>
+      Precios en pesos colombianos (COP) · hola@bosqueycielo.com · 310 492 5416 · NIT 901.481.694-2
     </div>
     """
+
+
+def _notas(p: dict, notas: str) -> str:
+    if not notas:
+        return ""
+    return f"""
+    <div class="espacio-corto"></div>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr><td class="nota">
+        <div><span class="nota-titulo">NOTAS Y OBSERVACIONES</span><br/>{_esc(notas)}</div>
+      </td></tr>
+    </table>"""
 
 
 def _html_a_pdf(html: str) -> bytes:
@@ -134,89 +184,77 @@ def generar_html_pdf_cotizacion(datos: dict) -> str:
     cliente     = datos.get("cliente", {})
     productos   = datos.get("productos", [])
     envio_val   = int(float(datos.get("envio", 0) or 0))
-    notas       = datos.get("notas", "")
     plazo       = datos.get("plazo_entrega", "4-6 semanas hábiles")
     condiciones = datos.get("condiciones_pago", "50% anticipo · 50% contra entrega")
     numero      = datos.get("numero", "")
     fecha       = datos.get("fecha", "")
 
-    subtotal = sum(int(float(p.get("precio_unitario", 0))) * int(p.get("cantidad", 1))
-                   for p in productos)
-    total = subtotal + envio_val
+    total = sum(int(float(p.get("precio_unitario", 0))) * int(p.get("cantidad", 1))
+                for p in productos) + envio_val
 
     filas = ""
-    for p in productos:
-        qty  = int(p.get("cantidad", 1))
-        pre  = int(float(p.get("precio_unitario", 0)))
-        desc = (f'<br/><span class="td-desc">{_esc(p["descripcion"])}</span>'
-                if p.get("descripcion") else "")
+    for prod in productos:
+        qty  = int(prod.get("cantidad", 1))
+        pre  = int(float(prod.get("precio_unitario", 0)))
+        desc = (f'<br/><span class="td-desc">{_esc(prod["descripcion"])}</span>'
+                if prod.get("descripcion") else "")
         filas += f"""
         <tr>
-          <td class="td" width="52%"><b>{_esc(p.get('nombre',''))}</b>{desc}</td>
+          <td class="td" width="50%"><b>{_esc(prod.get('nombre',''))}</b>{desc}</td>
           <td class="td cen" width="10%">{qty}</td>
-          <td class="td der" width="19%">{_fmt(pre)}</td>
-          <td class="td der" width="19%"><b>{_fmt(qty*pre)}</b></td>
+          <td class="td der" width="20%">{_fmt(pre)}</td>
+          <td class="td der" width="20%"><b>{_fmt(qty*pre)}</b></td>
         </tr>"""
 
     if envio_val:
         filas += f"""
         <tr>
-          <td class="td der" colspan="3">Envío</td>
-          <td class="td der">{_fmt(envio_val)}</td>
+          <td class="td-extra der" colspan="3">Envío</td>
+          <td class="td-extra der">{_fmt(envio_val)}</td>
         </tr>"""
 
-    bloque_notas = ""
-    if notas:
-        bloque_notas = f"""
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10pt">
-          <tr><td class="nota">
-            <div class="nota-titulo">NOTAS Y OBSERVACIONES</div>{_esc(notas)}
-          </td></tr>
-        </table>"""
-
-    marca = ('<div class="marca">Bosque y Cielo'
-             '<br/><span class="marca-sub">CERÁMICA ARTESANAL</span></div>')
-    contacto = ('www.bosqueycielo.com<br/>KR 34 # 5B-61 LC 103 · Cali, Valle<br/>'
-                'Cel: 310 492 5416 · NIT: 901.481.694-2')
+    contacto = ("www.bosqueycielo.com<br/>KR 34 # 5B-61 LC 103 · Cali, Valle<br/>"
+                "Cel: 310 492 5416 · NIT: 901.481.694-2")
 
     return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>{_base_css(BYC_ROSA, BYC_CREMA, BYC_TEXTO, BYC_SUAVE, BYC_LINEA)}</style>
-</head><body>
+<html><head><meta charset="utf-8"><style>{_css(BYC)}</style></head><body>
 
-{_cabecera(BYC_ROSA, BYC_CREMA, BYC_TEXTO, BYC_SUAVE, marca, contacto, numero, fecha)}
+{_encabezado(BYC, "Bosque y Cielo", "CERÁMICA ARTESANAL", contacto, numero, fecha)}
 
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:12pt">
-  <tr valign="top">
-    <td width="49%" class="caja">{_bloque_cliente(cliente)}</td>
+<div class="espacio"></div>
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td width="49%" class="caja">{_caja("Cliente", [
+        ("Contacto", cliente.get("nombre", "")),
+        ("Empresa",  cliente.get("empresa", "")),
+        ("Celular",  cliente.get("telefono", "")),
+        ("Correo",   cliente.get("email", "")),
+    ])}</td>
     <td width="2%"></td>
-    <td width="49%" class="caja">
-      <div class="caja-titulo">CONDICIONES</div>
-      <div class="campo-label">CONDICIONES DE PAGO</div>
-      <div class="campo-valor">{_esc(condiciones)}</div>
-      <div class="campo-label" style="padding-top:6pt">PLAZO DE ENTREGA</div>
-      <div class="campo-valor">{_esc(plazo)}</div>
-    </td>
+    <td width="49%" class="caja">{_caja("Condiciones", [
+        ("Condiciones de pago", condiciones),
+        ("Plazo de entrega",    plazo),
+    ])}</td>
   </tr>
 </table>
 
 <div class="seccion">Productos cotizados</div>
 <table width="100%" cellpadding="0" cellspacing="0" repeat="1">
   <tr>
-    <td class="th" width="52%">PRODUCTO / DESCRIPCIÓN</td>
+    <td class="th" width="50%">PRODUCTO / DESCRIPCIÓN</td>
     <td class="th cen" width="10%">CANT.</td>
-    <td class="th der" width="19%">P. UNITARIO</td>
-    <td class="th der" width="19%">TOTAL</td>
+    <td class="th der" width="20%">P. UNITARIO</td>
+    <td class="th der" width="20%">TOTAL</td>
   </tr>
   {filas}
   <tr>
-    <td class="total-fila" colspan="3">TOTAL</td>
-    <td class="total-fila der">{_fmt(total)}</td>
+    <td class="total" colspan="3">TOTAL</td>
+    <td class="total der">{_fmt(total)}</td>
   </tr>
 </table>
 
-{bloque_notas}
-{_pie(BYC_ROSA, "Cada pieza es única, hecha a mano con amor.", "hola@bosqueycielo.com")}
+{_notas(BYC, datos.get("notas", ""))}
+{_pie("Cada pieza es única, hecha a mano con amor.")}
 </body></html>"""
 
 
@@ -229,66 +267,54 @@ def generar_pdf_cotizacion(datos: dict) -> bytes:
 def generar_html_pdf_pottery(datos: dict) -> str:
     cliente     = datos.get("cliente", {})
     taller      = datos.get("taller", {})
-    notas       = datos.get("notas", "")
     condiciones = datos.get("condiciones_pago",
                             "50% anticipo para confirmar la reserva · 50% el día del taller")
     inclusiones = datos.get("inclusiones",
                             "Materiales · piezas en bizcocho listas · horneada · "
                             "entrega de piezas terminadas aprox. 2 semanas después")
-    numero      = datos.get("numero", "")
-    fecha       = datos.get("fecha", "")
+    numero = datos.get("numero", "")
+    fecha  = datos.get("fecha", "")
 
     participantes  = int(taller.get("participantes", 1))
     precio_persona = int(float(taller.get("precio_por_persona", 0)))
     total          = participantes * precio_persona
     anticipo       = total // 2
 
-    bloque_taller = _campos("DETALLE DEL TALLER", [
+    ejercicio = (f'<br/><span class="td-desc">{_esc(taller["ejercicio"])}</span>'
+                 if taller.get("ejercicio") else "")
+    contacto = "www.bosqueycielo.com<br/>Cali, Valle<br/>Cel: 310 492 5416 · NIT: 901.481.694-2"
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>{_css(PL)}</style></head><body>
+
+{_encabezado(PL, "Pottery Lab", "BOSQUE &amp; CIELO", contacto, numero, fecha)}
+
+<div class="espacio"></div>
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td width="49%" class="caja">{_caja("Cliente", [
+        ("Contacto", cliente.get("nombre", "")),
+        ("Empresa",  cliente.get("empresa", "")),
+        ("Celular",  cliente.get("telefono", "")),
+        ("Correo",   cliente.get("email", "")),
+    ])}</td>
+    <td width="2%"></td>
+    <td width="49%" class="caja">{_caja("Detalle del taller", [
         ("Tipo de evento",   taller.get("tipo", "")),
-        ("Ejercicio",        taller.get("ejercicio", "")),
         ("Lugar",            taller.get("lugar", "")),
         ("Fecha del taller", taller.get("fecha_taller", "")),
         ("Duración",         taller.get("duracion", "")),
-    ])
-
-    ejercicio = (f'<br/><span class="td-desc">{_esc(taller["ejercicio"])}</span>'
-                 if taller.get("ejercicio") else "")
-
-    bloque_notas = ""
-    if notas:
-        bloque_notas = f"""
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10pt">
-          <tr><td class="nota">
-            <div class="nota-titulo">NOTAS Y OBSERVACIONES</div>{_esc(notas)}
-          </td></tr>
-        </table>"""
-
-    marca = ('<div class="marca"><span class="marca-sub" style="font-size:8pt">POTTERY LAB</span>'
-             '<br/>Bosque &amp; Cielo</div>')
-    contacto = ('www.bosqueycielo.com<br/>Cel: 310 492 5416 · NIT: 901.481.694-2')
-
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>{_base_css(PL_BARRO, PL_ARENA, PL_TEXTO, PL_SUAVE, PL_LINEA)}</style>
-</head><body>
-
-{_cabecera(PL_BARRO, PL_ARENA, PL_TEXTO, PL_SUAVE, marca, contacto, numero, fecha)}
-
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:12pt">
-  <tr valign="top">
-    <td width="49%" class="caja">{_bloque_cliente(cliente)}</td>
-    <td width="2%"></td>
-    <td width="49%" class="caja">{bloque_taller}</td>
+    ])}</td>
   </tr>
 </table>
 
 <div class="seccion">Inversión</div>
 <table width="100%" cellpadding="0" cellspacing="0">
   <tr>
-    <td class="th" width="46%">CONCEPTO</td>
+    <td class="th" width="44%">CONCEPTO</td>
     <td class="th cen" width="16%">PARTICIPANTES</td>
-    <td class="th der" width="19%">P. POR PERSONA</td>
-    <td class="th der" width="19%">TOTAL</td>
+    <td class="th der" width="20%">P. POR PERSONA</td>
+    <td class="th der" width="20%">TOTAL</td>
   </tr>
   <tr>
     <td class="td"><b>{_esc(taller.get('tipo','Taller'))}</b>{ejercicio}</td>
@@ -297,32 +323,26 @@ def generar_html_pdf_pottery(datos: dict) -> str:
     <td class="td der"><b>{_fmt(total)}</b></td>
   </tr>
   <tr>
-    <td class="td" colspan="3" style="background-color:{PL_ARENA}">
-      <i>Anticipo para reservar (50%)</i></td>
-    <td class="td der" style="background-color:{PL_ARENA}"><b>{_fmt(anticipo)}</b></td>
+    <td class="anticipo" colspan="3"><i>Anticipo para reservar (50%)</i></td>
+    <td class="anticipo der"><b>{_fmt(anticipo)}</b></td>
   </tr>
   <tr>
-    <td class="total-fila" colspan="3">TOTAL</td>
-    <td class="total-fila der">{_fmt(total)}</td>
+    <td class="total" colspan="3">TOTAL</td>
+    <td class="total der">{_fmt(total)}</td>
   </tr>
 </table>
 
-<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:12pt">
-  <tr valign="top">
-    <td width="49%" class="caja">
-      <div class="caja-titulo">INCLUYE</div>
-      <div class="campo-valor">{_esc(inclusiones)}</div>
-    </td>
+<div class="espacio"></div>
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td width="49%" class="caja">{_caja("Incluye", [("", inclusiones)])}</td>
     <td width="2%"></td>
-    <td width="49%" class="caja">
-      <div class="caja-titulo">CONDICIONES DE PAGO</div>
-      <div class="campo-valor">{_esc(condiciones)}</div>
-    </td>
+    <td width="49%" class="caja">{_caja("Condiciones de pago", [("", condiciones)])}</td>
   </tr>
 </table>
 
-{bloque_notas}
-{_pie(PL_BARRO, "Cada taller es una experiencia única, hecha con amor.", "hola@bosqueycielo.com")}
+{_notas(PL, datos.get("notas", ""))}
+{_pie("Cada taller es una experiencia única, hecha con amor.")}
 </body></html>"""
 
 
