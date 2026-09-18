@@ -683,6 +683,15 @@ LA PÁGINA: Camilo y Daniela también cotizan desde https://claude.ai/artifact/7
 (Taller Amphora). Usa la misma fórmula, así que los precios deben coincidir. Si alguien
 pregunta por "la página" o "el cotizador visual", es esa.
 
+PEGADO DESDE LA PÁGINA: si el mensaje empieza con "COTIZACIÓN AMPHORA", es una cotización
+armada allá que Camilo quiere en el Cotizador Interno. La página guarda en su propia base,
+no en el Sheet: escribirla es tu trabajo. Lee las referencias con sus datos (cantidad,
+tamaño, acabado, minutos_acabado y los costos que traiga cada una), pásalas tal cual como
+`lineas` y `condiciones` a guardar_hoja_cotizacion con ese mismo número, y responde
+confirmando en qué pestaña quedó. Si el total que calculas no coincide con el que trae el
+texto, DILO con los dos valores en vez de corregirlo callado: significa que la página y la
+hoja tienen parámetros distintos.
+
 TAMAÑO: si no lo dicen, dedúcelo del tipo de pieza y AVISA qué asumiste
 ("asumí tamaño M, una taza estándar"). XS/S piezas pequeñas · M taza o plato de 27cm ·
 L jarra o pieza de 2kg · XL matera grande de 4kg+.

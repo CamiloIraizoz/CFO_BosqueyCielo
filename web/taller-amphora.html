@@ -2,7 +2,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<!-- jsPDF viaja con la página: cdnjs devuelve 404 para este archivo. Ver web/vendor/README.md -->
+<script src="vendor/jspdf.umd.min.js"></script>
 <style>
   :root {
     --ground:#FBF8F6; --surface:#FFFFFF; --surface-2:#F6EEEB;
@@ -358,6 +359,7 @@
             <button class="btn" id="b-pdf">Descargar PDF</button>
             <button class="btn sec" id="b-ver">Ver PDF</button>
             <button class="btn sec" id="b-guardar">Guardar</button>
+            <button class="btn fantasma" id="b-bot">Copiar para el bot</button>
             <button class="btn fantasma" id="b-limpiar">Empezar de nuevo</button>
           </div>
           <div class="avisos" id="r-reporte"></div>
@@ -1328,6 +1330,77 @@
     if (urlVisor) { URL.revokeObjectURL(urlVisor); urlVisor = null; }
   }
 
+  // ── Pasarle la cotización al bot ──────────────────────────────────
+  // La página guarda en su propia base; al Cotizador Interno (Google Sheets)
+  // solo escribe el bot. Este texto es el puente: se pega en Telegram y el bot
+  // deja la hoja con el desglose.
+  function textoParaBot(r) {
+    var c = r.cond, lineas = ["COTIZACIÓN AMPHORA " + r.numero];
+    lineas.push("Cliente: " + (r.cliente || "sin cliente") +
+                (r.contacto ? " (" + r.contacto + ")" : ""));
+    lineas.push("Referencias:");
+    r.buenas.forEach(function (l, i) {
+      var it = cot.items.filter(function (x) { return x.id === l.id; })[0] || {};
+      var partes = [
+        (l.producto || "Referencia " + (i + 1)),
+        "cantidad " + l.cantidad,
+        "tamaño " + l.tamano,
+        "acabado " + l.dificultad,
+        "minutos_acabado " + (limpio(it.minutos_acabado) !== "" ? it.minutos_acabado : l.estandar)
+      ];
+      if (limpio(it.bizcocho) !== "") partes.push("costo_bizcocho " + it.bizcocho);
+      if (limpio(it.onzas) !== "") partes.push("oz_esmalte_por_pieza " + it.onzas);
+      if (limpio(it.empaque) !== "") partes.push("costo_empaque " + it.empaque);
+      if (limpio(it.vinilo) !== "") partes.push("costo_vinilo " + it.vinilo);
+      if (numero(it.minutos_extra, 0)) partes.push("minutos_extra " + it.minutos_extra);
+      if (l.descuentoPct) partes.push("descuento_pct " + l.descuentoPct);
+      if (l.notas) partes.push("notas: " + l.notas);
+      lineas.push((i + 1) + ". " + partes.join(" · ") + " → PVP " + pesos(l.pvp));
+    });
+    lineas.push("Condiciones: descuento_pct " + numero(c.descuento, 0) +
+                " · urgencia_pct " + numero(c.urgencia, 0) +
+                " · envio " + numero(c.envio, 0) +
+                " · desarrollo " + numero(c.desarrollo, 0) +
+                " · cobrar_iva " + (c.iva ? "sí" : "no") +
+                " · anticipo_pct " + numero(c.anticipo, 0) +
+                " · validez_dias " + numero(c.validez, 0) +
+                " · plazo " + (c.plazo || ""));
+    if (r.notas) lineas.push("Notas: " + r.notas);
+    lineas.push("Total: " + pesos(r.total) + " (" + r.piezas + " piezas)");
+    lineas.push("Guarda esto en el Cotizador Interno con guardar_hoja_cotizacion.");
+    return lineas.join("\n");
+  }
+
+  function copiarParaBot() {
+    if (!ultimo || !ultimo.buenas.length) { reportar(porQueNoHayPDF(), "mal"); return; }
+    var texto = textoParaBot(ultimo);
+    var listo = function () {
+      reportar("Copiado. Pégalo en el chat del bot en Telegram y él lo guarda en el " +
+               "Cotizador Interno.");
+      toast("Copiado para el bot");
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(listo).catch(function () { aMano(texto); });
+        return;
+      }
+    } catch (e) {}
+    aMano(texto);
+  }
+
+  // Si el portapapeles está bloqueado, el texto se muestra para copiarlo a mano.
+  function aMano(texto) {
+    var caja = $("r-reporte");
+    caja.textContent = "";
+    var nota = document.createElement("div"); nota.className = "aviso";
+    nota.textContent = "Copia este texto y pégaselo al bot en Telegram:";
+    var area = document.createElement("textarea");
+    area.readOnly = true; area.value = texto; area.rows = 8;
+    area.style.marginTop = "8px";
+    caja.appendChild(nota); caja.appendChild(area);
+    area.focus(); area.select();
+  }
+
   // ── Borrador local (comodidad de quien está en esta pantalla) ──────
   function guardarBorrador() {
     try {
@@ -1899,7 +1972,11 @@
         if (!d) { toast("No hay conexión con la base: la cotización no se guardó"); return; }
         db = d;
         return d.collection("cotizaciones").add(doc)
-          .then(function () { toast("Cotización " + r.numero + " guardada"); })
+          .then(function () {
+            toast("Cotización " + r.numero + " guardada");
+            reportar("Guardada en la base de esta página. Para que quede también en el " +
+                     "Cotizador Interno, usa «Copiar para el bot».");
+          })
           .catch(function (e) {
             if (e && e.code === "invalid_argument") {
               puedeEscribir = false; $("b-guardar").disabled = true;
@@ -1909,6 +1986,7 @@
       });
     });
 
+    $("b-bot").addEventListener("click", copiarParaBot);
     $("b-guardar-ajustes").addEventListener("click", guardarAjustes);
     $("b-descartar").addEventListener("click", function () {
       pintarAjustes(); toast("Los campos volvieron a los valores guardados");
