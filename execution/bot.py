@@ -258,7 +258,6 @@ TOOLS = [
                 "minutos_acabado": {"type": "number", "description": "Minutos de acabado a mano. Solo si no hay estándar medido para ese tamaño/dificultad."},
                 "costo_bizcocho": {"type": "number", "description": "Costo del bizcocho de ESTA pieza, si es distinto al normal (un plato grande cuesta más que un pocillo)"},
                 "oz_esmalte_por_pieza": {"type": "number", "description": "Onzas de esmalte de ESTA pieza, si son distintas a las normales"},
-                "costo_empaque": {"type": "number", "description": "Empaque de ESTA pieza, si es distinto al normal"},
                 "costo_vinilo": {"type": "number", "description": "Vinilo o transfer de ESTA pieza"},
                 "minutos_extra": {"type": "number", "description": "Minutos adicionales por trabajo que el estándar no cubre"},
                 "descuento_pct": {"type": "number", "description": "Descuento sobre esta referencia, en %"},
@@ -279,7 +278,6 @@ TOOLS = [
                             "minutos_acabado": {"type": "number"},
                             "costo_bizcocho": {"type": "number"},
                             "oz_esmalte_por_pieza": {"type": "number"},
-                            "costo_empaque": {"type": "number"},
                             "costo_vinilo": {"type": "number"},
                             "minutos_extra": {"type": "number"},
                             "descuento_pct": {"type": "number"},
@@ -292,6 +290,7 @@ TOOLS = [
                     "type": "object",
                     "description": "Lo que aplica a TODO el pedido, no a una referencia.",
                     "properties": {
+                        "empaque":       {"type": "number", "description": "Lo que cuesta empacar TODO el pedido, en pesos. Se reparte entre las piezas, así que entra al costo de cada una."},
                         "descuento_pct": {"type": "number", "description": "Descuento comercial sobre el pedido"},
                         "urgencia_pct":  {"type": "number", "description": "Recargo por entrega más rápida de lo normal"},
                         "envio":         {"type": "number", "description": "Flete en pesos"},
@@ -343,7 +342,7 @@ TOOLS = [
     },
     {
         "name": "guardar_parametro_cotizador",
-        "description": "Guarda un costo o parámetro del cotizador en la hoja, para no volver a preguntarlo nunca. Úsalo apenas el usuario te diga un valor que falta (ej. 'el bizcocho me cuesta 8000' → guardar_parametro_cotizador('costo_bizcocho', 8000)). Parámetros: costo_bizcocho, costo_esmaltes, costo_empaque, costo_vinilo, minutos_otros_pasos, volumen_referencia, margen_pct, salario_mensual, arriendo_mes, servicios_mes, pct_uso_local, pct_uso_servicios, gastos_admin_mes, desperdicio_pct, mercadeo_pct, iva_pct.",
+        "description": "Guarda un costo o parámetro del cotizador en la hoja, para no volver a preguntarlo nunca. Úsalo apenas el usuario te diga un valor que falta (ej. 'el bizcocho me cuesta 8000' → guardar_parametro_cotizador('costo_bizcocho', 8000)). Parámetros: costo_bizcocho, costo_esmaltes, costo_vinilo, minutos_otros_pasos, volumen_referencia, margen_pct, salario_mensual, arriendo_mes, servicios_mes, pct_uso_local, pct_uso_servicios, gastos_admin_mes, desperdicio_pct, mercadeo_pct, iva_pct.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -674,7 +673,7 @@ pedido completo y sale un solo total. En `condiciones` van descuento, recargo po
 urgencia, envío, molde o desarrollo, anticipo, validez y plazo.
 
 DATOS POR REFERENCIA: cada línea puede traer sus propios materiales y son los que mandan
-(costo_bizcocho, oz_esmalte_por_pieza, costo_empaque, costo_vinilo), además de
+(costo_bizcocho, oz_esmalte_por_pieza, costo_vinilo), además de
 minutos_extra y descuento_pct. Un plato de 27 cm lleva más bizcocho y más esmalte que un
 pocillo: si el usuario te lo dice, pásalo en esa línea en vez de cambiar el parámetro
 general. El parámetro general es el valor típico; el de la línea es la excepción.
@@ -695,6 +694,11 @@ hoja tienen parámetros distintos.
 TAMAÑO: si no lo dicen, dedúcelo del tipo de pieza y AVISA qué asumiste
 ("asumí tamaño M, una taza estándar"). XS/S piezas pequeñas · M taza o plato de 27cm ·
 L jarra o pieza de 2kg · XL matera grande de 4kg+.
+
+EL EMPAQUE VA POR PEDIDO, NO POR PIEZA (Camilo, 2026-09-18): se cotiza una sola vez
+("empacar todo eso me cuesta $75.000") y va en condiciones.empaque; el motor lo reparte
+entre las piezas del pedido, así que entra al costo unitario y lleva margen. NUNCA lo
+pidas por pieza ni lo guardes como parámetro del taller: depende del pedido.
 
 COSTOS QUE FALTAN → PREGÚNTALOS, no te quedes con la advertencia:
 Cuando el resultado avise "Sin costo cargado: bizcocho, esmaltes...", muestra el precio

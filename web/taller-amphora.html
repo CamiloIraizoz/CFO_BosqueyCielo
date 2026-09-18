@@ -301,6 +301,11 @@
           <h2>Condiciones</h2>
           <p class="pista">Lo que aplica al pedido completo, no a una referencia. Todo esto sale impreso en el PDF.</p>
           <div class="rejilla">
+            <label class="campo" for="c-empaque">
+              <span>Empaque del pedido $</span>
+              <input type="number" id="c-empaque" class="num" min="0" step="1000" value="0">
+              <small>Lo que cuesta empacar todo el pedido. Se reparte entre las piezas.</small>
+            </label>
             <label class="campo" for="c-desc">
               <span>Descuento %</span>
               <input type="number" id="c-desc" class="num" min="0" max="60" step="1" value="0">
@@ -470,7 +475,6 @@
     ["costo_bizcocho",      "Bizcocho por pieza",         "$",   "Valor típico; se puede cambiar por referencia"],
     ["precio_oz_esmalte",   "Esmalte por onza",           "$",   "Galón de 128 oz a $260.000 = $2.031/oz"],
     ["oz_esmalte_por_pieza","Onzas de esmalte por pieza", "oz",  "Valor típico; se puede cambiar por referencia"],
-    ["costo_empaque",       "Empaque por pieza",          "$",   ""],
     ["costo_vinilo",        "Vinilo o transfer por pieza","$",   "0 si no lleva"],
     ["minutos_otros_pasos", "Minutos de otros pasos",     "min", "Respaldo mientras no haya tiempos medidos"],
     ["desperdicio_pct",     "Desperdicio",                "%",   "Piezas que se pierden en el proceso"],
@@ -588,7 +592,7 @@
       pintado: 50, tintas: 2, relieve: false,
       // Vacío = usar el parámetro general. Se llenan solo cuando esta
       // referencia se sale de lo normal (un plato lleva más que un pocillo).
-      bizcocho: "", onzas: "", vinilo: "", empaque: "",
+      bizcocho: "", onzas: "", vinilo: "",
       minutos_acabado: "", minutos_extra: "", descuento: "", notas: ""
     };
     if (base) {
@@ -601,7 +605,7 @@
     return {
       numero: nuevoNumero(), cliente: "", contacto: "", notas: "",
       items: [itemNuevo()],
-      cond: { descuento:0, urgencia:0, envio:0, desarrollo:0, iva:true,
+      cond: { empaque:0, descuento:0, urgencia:0, envio:0, desarrollo:0, iva:true,
               anticipo:50, validez:15, plazo:"4-6 semanas hábiles" }
     };
   }
@@ -622,7 +626,7 @@
     return limpio(valorItem) === "" ? Number(valorGeneral) || 0 : numero(valorItem, 0);
   }
 
-  function calcularLinea(it) {
+  function calcularLinea(it, empaquePorPieza) {
     var P = PARAMS, avisos = [];
     var cantidad = Math.max(1, Math.round(numero(it.cantidad, 1)));
     var dificultad = gradoAcabado(numero(it.pintado, 0), numero(it.tintas, 0), !!it.relieve);
@@ -667,13 +671,14 @@
     var onzas = conAjuste(it.onzas, P.oz_esmalte_por_pieza);
     var esmaltes = onzas ? onzas * Number(P.precio_oz_esmalte) : Number(P.costo_esmaltes) || 0;
     var vinilo = conAjuste(it.vinilo, P.costo_vinilo);
-    var empaque = conAjuste(it.empaque, P.costo_empaque);
+    // El empaque es del pedido, no de la pieza: llega ya repartido.
+    var empaque = Number(empaquePorPieza) || 0;
     var materiales = bizcocho + esmaltes + vinilo;
 
     var faltan = [];
     if (!bizcocho) faltan.push("bizcocho");
     if (!esmaltes) faltan.push("esmaltes");
-    if (!empaque) faltan.push("empaque");
+    if (!empaque) faltan.push("empaque del pedido");
     if (faltan.length) {
       avisos.push({ duro:true, texto:"Sin costo cargado: " + faltan.join(", ") +
                     ". El precio sale por debajo del real." });
@@ -707,7 +712,7 @@
       valorHora:valorHora, notas:limpio(it.notas),
       costos: [
         ["Materiales", materiales], ["Mano de obra", manoObra],
-        ["Empaque", empaque], ["Desperdicio", desperdicio], ["Mercadeo", mercadeo],
+        ["Empaque (del pedido)", empaque], ["Desperdicio", desperdicio], ["Mercadeo", mercadeo],
         ["Arriendo y servicios", arriendo], ["Administración", admin]
       ],
       granTotal:granTotal, margen:pvp - granTotal, pvp:pvp,
@@ -720,7 +725,8 @@
     var c = cot, piezas = 0, avisos = [];
     c.items.forEach(function (it) { piezas += Math.max(1, Math.round(numero(it.cantidad, 1))); });
 
-    var lineas = c.items.map(calcularLinea);
+    var empaquePorPieza = piezas > 0 ? numero(c.cond.empaque, 0) / piezas : 0;
+    var lineas = c.items.map(function (it) { return calcularLinea(it, empaquePorPieza); });
     var buenas = lineas.filter(function (l) { return !l.error; });
 
     lineas.forEach(function (l) {
@@ -903,17 +909,14 @@
     var bizcocho = entrada("number", it.bizcocho, { min:"0", step:"100", id:"b-" + it.id });
     var onzas    = entrada("number", it.onzas,    { min:"0", step:"0.25", id:"o-" + it.id });
     var vinilo   = entrada("number", it.vinilo,   { min:"0", step:"100", id:"v-" + it.id });
-    var empaque  = entrada("number", it.empaque,  { min:"0", step:"100", id:"e-" + it.id });
     var minAcab  = entrada("number", it.minutos_acabado, { min:"0", step:"0.5", id:"ma-" + it.id });
     var minExtra = entrada("number", it.minutos_extra, { min:"-60", step:"1", id:"m-" + it.id });
     var descItem = entrada("number", it.descuento, { min:"0", max:"60", step:"1", id:"d-" + it.id });
-    it._placeholders = { bizcocho:bizcocho, onzas:onzas, vinilo:vinilo, empaque:empaque,
-                         minAcab:minAcab };
+    it._placeholders = { bizcocho:bizcocho, onzas:onzas, vinilo:vinilo, minAcab:minAcab };
 
     rej.appendChild(campo("Bizcocho $", bizcocho, "Por pieza"));
     rej.appendChild(campo("Esmalte (oz)", onzas, "Onzas por pieza"));
     rej.appendChild(campo("Vinilo $", vinilo, "0 si no lleva"));
-    rej.appendChild(campo("Empaque $", empaque, "Por pieza"));
     rej.appendChild(campo("Minutos de acabado", minAcab, "Vacío = el estándar"));
     rej.appendChild(campo("Minutos extra", minExtra, "Trabajo que no cubre el estándar"));
     rej.appendChild(campo("Descuento %", descItem, "Solo de esta referencia"));
@@ -932,7 +935,7 @@
 
     // ── Conexión con el estado
     var mapa = [[prod,"producto"], [cant,"cantidad"], [rango,"pintado"], [tintas,"tintas"],
-                [bizcocho,"bizcocho"], [onzas,"onzas"], [vinilo,"vinilo"], [empaque,"empaque"],
+                [bizcocho,"bizcocho"], [onzas,"onzas"], [vinilo,"vinilo"],
                 [minAcab,"minutos_acabado"], [minExtra,"minutos_extra"],
                 [descItem,"descuento"], [notas,"notas"]];
     mapa.forEach(function (par) {
@@ -963,7 +966,6 @@
       ph.bizcocho.placeholder = String(Math.round(Number(PARAMS.costo_bizcocho) || 0));
       ph.onzas.placeholder = String(Number(PARAMS.oz_esmalte_por_pieza) || 0);
       ph.vinilo.placeholder = String(Math.round(Number(PARAMS.costo_vinilo) || 0));
-      ph.empaque.placeholder = String(Math.round(Number(PARAMS.costo_empaque) || 0));
       ph.minAcab.placeholder = l.estandar == null ? "sin medir" : String(l.estandar);
 
       if (l.error) {
@@ -1350,14 +1352,14 @@
       ];
       if (limpio(it.bizcocho) !== "") partes.push("costo_bizcocho " + it.bizcocho);
       if (limpio(it.onzas) !== "") partes.push("oz_esmalte_por_pieza " + it.onzas);
-      if (limpio(it.empaque) !== "") partes.push("costo_empaque " + it.empaque);
       if (limpio(it.vinilo) !== "") partes.push("costo_vinilo " + it.vinilo);
       if (numero(it.minutos_extra, 0)) partes.push("minutos_extra " + it.minutos_extra);
       if (l.descuentoPct) partes.push("descuento_pct " + l.descuentoPct);
       if (l.notas) partes.push("notas: " + l.notas);
       lineas.push((i + 1) + ". " + partes.join(" · ") + " → PVP " + pesos(l.pvp));
     });
-    lineas.push("Condiciones: descuento_pct " + numero(c.descuento, 0) +
+    lineas.push("Condiciones: empaque " + numero(c.empaque, 0) +
+                " · descuento_pct " + numero(c.descuento, 0) +
                 " · urgencia_pct " + numero(c.urgencia, 0) +
                 " · envio " + numero(c.envio, 0) +
                 " · desarrollo " + numero(c.desarrollo, 0) +
@@ -1908,7 +1910,7 @@
       el.oninput = function () { cot[par[1]] = el.value; recalcular(); guardarBorrador(); };
     });
 
-    [["c-desc","descuento"], ["c-urgencia","urgencia"], ["c-envio","envio"],
+    [["c-empaque","empaque"], ["c-desc","descuento"], ["c-urgencia","urgencia"], ["c-envio","envio"],
      ["c-desarrollo","desarrollo"], ["c-anticipo","anticipo"], ["c-validez","validez"],
      ["c-plazo","plazo"]].forEach(function (par) {
       var el = $(par[0]);

@@ -77,7 +77,7 @@ PARAMS_DEFECTO = {
     "costo_esmaltes":         0,      # o se deriva de oz_esmalte_por_pieza
     "oz_esmalte_por_pieza":   0.0,    # onzas de esmalte que lleva una pieza
     "costo_vinilo":           0,
-    "costo_empaque":          0,
+    "costo_empaque":          0,    # por pieza: sale de repartir el empaque del pedido
     # UNA sola quema: el bizcocho se compra ya quemado, así que el taller solo
     # hace la del esmalte (Camilo, 2026-09-17). Y va en cero porque su energía ya
     # está dentro de servicios públicos, que se prorratea arriba: cargarla aquí
@@ -112,7 +112,7 @@ PARAMS_PREGUNTABLES = {
                             f"(el galón de 128 oz cuesta $260.000, o sea ${precio_unitario_material('esmalte_blanco'):,.0f} la onza)".replace(",", "."),
     "costo_esmaltes":      "¿Cuánto cuestan los esmaltes por pieza? "
                            "(si prefieres, dime las onzas y yo saco el valor)",
-    "costo_empaque":       "¿Cuánto cuesta el empaque por pieza?",
+
     "costo_vinilo":        "¿Cuánto cuesta el vinilo o transfer por pieza? (0 si no lleva)",
     "minutos_otros_pasos": "Además del acabado, ¿cuántos minutos por pieza se van en "
                            "preparación, pulido, cargue de horno y empaque?",
@@ -199,9 +199,9 @@ def parametros_pendientes(params: dict = None) -> list:
     if not (float(params.get("oz_esmalte_por_pieza", 0) or 0)
             or float(params.get("costo_esmaltes", 0) or 0)):
         pendientes.append("oz_esmalte_por_pieza")
-    for clave in ["costo_empaque", "minutos_otros_pasos"]:
-        if not float(params.get(clave, 0) or 0):
-            pendientes.append(clave)
+    # El empaque ya no se pregunta como parámetro: va por pedido, en la cotización.
+    if not float(params.get("minutos_otros_pasos", 0) or 0):
+        pendientes.append("minutos_otros_pasos")
     return pendientes
 
 
@@ -354,22 +354,26 @@ def guardar_parametro(clave: str, valor) -> str:
 # material era la mayor imprecisión del motor.
 AJUSTES_LINEA = [
     "costo_bizcocho", "oz_esmalte_por_pieza", "costo_esmaltes", "costo_vinilo",
-    "costo_empaque", "margen_pct",      # sobreescriben el parámetro general
+    "margen_pct",                       # sobreescriben el parámetro general
     "minutos_extra",                    # se suman al tiempo de la pieza
     "descuento_pct",                    # baja el total de esa línea
 ]
+# El EMPAQUE no está acá: no es un costo de la pieza sino del pedido (Camilo,
+# 2026-09-18). Se cotiza una vez, se reparte entre las piezas del pedido y así
+# entra al costo unitario y lleva margen como cualquier otro costo.
 
 
 def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             minutos_acabado: float = None, params: dict = None,
             producto: str = "", tiempos: dict = None,
             ajustes: dict = None, notas: str = "",
-            cantidad_pedido: int = None) -> dict:
+            cantidad_pedido: int = None, empaque_pedido: float = None) -> dict:
     """Calcula el precio de una pieza y del pedido. Devuelve el desglose completo.
 
     `ajustes` son los datos propios de esta línea (ver AJUSTES_LINEA). `cantidad_pedido`
     es el total de piezas del pedido completo: sirve para que la advertencia de volumen
-    mire el pedido entero y no cada línea por separado.
+    mire el pedido entero y para repartir el empaque. `empaque_pedido` es lo que cuesta
+    empacar TODO el pedido; se divide entre esas piezas.
     """
     params = dict(params or cargar_parametros())
     ajustes = {k: v for k, v in (ajustes or {}).items()
@@ -382,6 +386,9 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             params[clave] = float(valor)
     minutos_extra = float(ajustes.get("minutos_extra", 0) or 0)
     descuento_pct = float(ajustes.get("descuento_pct", 0) or 0)
+    piezas_pedido = int(cantidad_pedido or cantidad) or 1
+    if empaque_pedido is not None:
+        params["costo_empaque"] = float(empaque_pedido) / piezas_pedido
     advertencias = []
 
     if params.get("_origen") == "respaldo":
@@ -450,7 +457,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     faltantes = [n for n, v in [
         ("bizcocho", params["costo_bizcocho"]),
         ("esmaltes", costo_esmaltes),
-        ("empaque", params["costo_empaque"])] if float(v) == 0]
+        ("empaque del pedido", params["costo_empaque"])] if float(v) == 0]
     if faltantes:
         advertencias.append("Sin costo cargado: " + ", ".join(faltantes) +
                             ". El precio sale por debajo del real.")
@@ -466,7 +473,6 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     admin     = float(params["gastos_admin_mes"]) / volumen
     gran_total = directo_total + mercadeo + arriendo + admin
 
-    piezas_pedido = int(cantidad_pedido or cantidad)
     if piezas_pedido < volumen * 0.2:
         advertencias.append(
             f"El pedido ({piezas_pedido} piezas) es chico frente al volumen de referencia "
@@ -500,7 +506,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             ("Materiales (bizcocho, esmaltes, vinilo)", materiales),
             ("Mano de obra", costo_mo),
             ("Quema del esmalte", quemas),
-            ("Empaque", empaque),
+            ("Empaque (del pedido, por pieza)", empaque),
             ("Desperdicio", desperdicio),
             ("Mercadeo", mercadeo),
             ("Arriendo y servicios (incluye quemas)", arriendo),
@@ -534,6 +540,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
 # materas. Cada línea se cotiza con SU tamaño, SU decoración y SUS materiales; lo
 # que se comparte es el pedido — descuento, urgencia, envío e IVA.
 CONDICIONES_DEFECTO = {
+    "empaque":       0.0,    # lo que cuesta empacar TODO el pedido; se reparte por pieza
     "descuento_pct": 0.0,    # descuento comercial sobre todo el pedido
     "urgencia_pct":  0.0,    # recargo por entrega express
     "envio":         0.0,    # flete, si se cobra
@@ -579,7 +586,8 @@ def cotizar_pedido(lineas: list, condiciones: dict = None, params: dict = None,
                     l.get("minutos_acabado"), params=params,
                     producto=l.get("producto", ""), tiempos=tiempos,
                     ajustes=ajustes, notas=l.get("notas", ""),
-                    cantidad_pedido=piezas)
+                    cantidad_pedido=piezas,
+                    empaque_pedido=float(cond["empaque"] or 0) or None)
         r["pct_pintado"] = l.get("pct_pintado")
         r["num_tintas"] = l.get("num_tintas")
         resultados.append(r)

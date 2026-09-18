@@ -61,9 +61,10 @@ Telegram y los guarda; también se pueden escribir a mano en la pestaña
 *Parámetros Cotizador*:
 
 - `costo_esmaltes` u `oz_esmalte_por_pieza` (el galón de 128 oz cuesta $260.000 → $2.031/oz)
-- `costo_empaque`
 - Tiempos de **preparación del bizcocho** y de **terminado y empaque**, por tamaño
   (pestaña *Tiempos Estándar*). Lo ideal es cronometrarlos en planta.
+
+El **empaque** ya no está en esta lista: va por pedido, se escribe en cada cotización.
 
 Ya cargado: `costo_bizcocho` = $4.500 · volumen de referencia = 150 piezas/mes ·
 servicios al 70% · margen 40% sobre el costo.

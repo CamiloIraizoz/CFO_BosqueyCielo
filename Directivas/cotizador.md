@@ -47,13 +47,18 @@ imprecisión del motor.
 
 | Ajuste | Qué hace |
 |---|---|
-| `costo_bizcocho`, `oz_esmalte_por_pieza`, `costo_esmaltes`, `costo_vinilo`, `costo_empaque` | Reemplazan el parámetro general solo en esa línea |
+| `costo_bizcocho`, `oz_esmalte_por_pieza`, `costo_esmaltes`, `costo_vinilo` | Reemplazan el parámetro general solo en esa línea |
 | `margen_pct` | Margen distinto para esa referencia |
 | `minutos_extra` | Se suman al tiempo de la pieza (trabajo que el estándar no cubre) |
 | `descuento_pct` | Baja el total de esa línea |
 
 Si una línea trae `costo_esmaltes` en pesos y no trae onzas, las onzas del parámetro
 general se ignoran: si no, se cobrarían las dos cosas.
+
+**El empaque NO está acá.** Va por pedido, no por pieza (Camilo, 2026-09-18): se cotiza
+una sola vez en `condiciones.empaque` y el motor lo divide entre las piezas del pedido,
+así que entra al costo unitario y lleva margen como cualquier otro costo. No se pregunta
+por pieza ni se guarda como parámetro del taller: depende del pedido.
 
 ## La cadena de cálculo
 Réplica exacta de la hoja **Cotizador Interno** (pestaña *Costos Detallados*):
