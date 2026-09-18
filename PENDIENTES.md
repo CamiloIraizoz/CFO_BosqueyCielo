@@ -1,4 +1,4 @@
-# Dónde vamos — 17 de septiembre de 2026
+# Dónde vamos — 18 de septiembre de 2026
 
 Estado del proyecto para retomar en otra sesión. Lo que está hecho vive en el repo;
 lo que falta está abajo con lo que hace falta para cerrarlo.
@@ -24,10 +24,22 @@ personal (camilo.iraizoz@gmail.com), con `db`, `user` y `downloads`, y con
 Para actualizarla desde otra conversación hay que pasar esa URL como `url` al publicar;
 sin eso se crea un artifact aparte. Es privada hasta que se comparta desde su menú.
 
-Versión 2 (2026-09-17): cotiza hasta **20 referencias en un mismo pedido**, cada una con
-sus propios materiales, minutos extra y descuento; condiciones del pedido (descuento,
-urgencia, envío, molde, anticipo, validez, plazo, IVA); y una pestaña **Ajustes** donde
-se editan los parámetros del taller y la tabla de tiempos estándar.
+Versión 7 (2026-09-18): cotiza hasta **20 referencias en un mismo pedido**, cada una con
+sus propios materiales, minutos de acabado, minutos extra y descuento; condiciones del
+pedido (descuento, urgencia, envío, molde, anticipo, validez, plazo, IVA); pestaña
+**Ajustes** con los parámetros del taller y la tabla de tiempos; y Producción con
+bitácora por proyecto, anotaciones automáticas de cada cambio de etapa y pendientes.
+
+**jsPDF viaja con la página** (`web/vendor/`, ver su README): la URL de cdnjs devuelve
+404 y por eso el PDF no se armaba. Al republicar hay que volver a pasar el archivo de
+apoyo, o la página queda sin generador:
+
+```
+files: { "vendor/jspdf.umd.min.js": "web/vendor/jspdf.umd.min.js" }
+```
+
+**Falta que Camilo confirme** que el PDF ya baja en su navegador — es lo único que no se
+puede probar desde acá.
 
 **Ojo con la duplicación:** la página recalcula el precio en JavaScript con la misma
 cadena que `execution/cotizador.py`. Si se cambia la fórmula en un lado hay que
@@ -37,6 +49,11 @@ cambiarla en el otro, o el bot y la página darán precios distintos.
 y el bot los lee de la hoja *Cotizador Interno*. Son dos sitios distintos: si se cambia
 un costo en la pestaña Ajustes, hay que decírselo también al bot (o escribirlo en la
 hoja) para que los dos coticen igual. La página lo advierte en pantalla.
+
+**Dónde quedan las cotizaciones de la página:** en la base del artifact, colección
+`cotizaciones` (se lee desde acá con ArtifactData). Al Cotizador Interno solo escribe el
+bot, porque las credenciales de Google viven en Railway. El puente es el botón «Copiar
+para el bot»: el texto se pega en Telegram y el bot llama `guardar_hoja_cotizacion`.
 
 ### 2. Cargar los costos que faltan
 El precio sale **por debajo del real** hasta que estén. El bot los pregunta solo por
@@ -62,7 +79,11 @@ Mientras no lo esté, el motor usa sus valores de respaldo y lo avisa en cada co
 búsqueda del 2026-09-17 no apareció ninguno con web propia y precios publicados. Hay que
 agregar a mano los que Camilo y Daniela conozcan.
 
-### 5. Verificar el scope `files` de HubSpot
+### 5. Que Railway tome el último commit
+El bot solo reconoce el texto de «Copiar para el bot» con el prompt del commit 6ca7b4f.
+Si al pegarlo no responde como debe, revisar que Railway haya desplegado.
+
+### 6. Verificar el scope `files` de HubSpot
 `python3 execution/verificar_hubspot.py --escritura` (pasando `HUBSPOT_TOKEN` por
 entorno). Si el PDF se adjunta bien a las notas, ya está: el bot lo dice en cada
 cotización con "nota con PDF adjunto".
