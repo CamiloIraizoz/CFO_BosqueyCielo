@@ -200,6 +200,20 @@
   .chip.atrasado { background:#F6E3E2; color:var(--crit); }
   :root[data-theme="dark"] .chip.atrasado, :root:not([data-theme="light"]) .chip.atrasado { background:#3A2624; }
 
+  /* Vista previa del PDF */
+  .visor { position:fixed; inset:0; z-index:60; background:rgba(46,33,31,.55);
+           display:flex; align-items:center; justify-content:center; padding:18px; }
+  .visor[hidden] { display:none; }
+  .visor-caja { background:var(--surface); border-radius:var(--r); box-shadow:var(--shadow);
+                width:min(900px, 100%); height:min(90vh, 100%); display:flex; flex-direction:column;
+                overflow:hidden; }
+  .visor-top { display:flex; gap:10px; align-items:center; padding:12px 14px;
+               border-bottom:1px solid var(--line); }
+  .visor-top b { flex:1 1 auto; font-weight:500; font-size:14px; }
+  .visor iframe { flex:1 1 auto; width:100%; border:0; background:var(--surface-2); }
+  .visor-pie { margin:0; padding:9px 14px; font-size:12px; color:var(--muted);
+               border-top:1px solid var(--line); }
+
   /* Bitácora y pendientes */
   .bloque { border-top:1px solid var(--line); padding-top:12px; }
   .bloque-t { font-size:11px; letter-spacing:.08em; text-transform:uppercase;
@@ -342,6 +356,7 @@
 
           <div class="acciones">
             <button class="btn" id="b-pdf">Descargar PDF</button>
+            <button class="btn sec" id="b-ver">Ver PDF</button>
             <button class="btn sec" id="b-guardar">Guardar</button>
             <button class="btn fantasma" id="b-limpiar">Empezar de nuevo</button>
           </div>
@@ -402,6 +417,19 @@
       <p class="pista" style="margin:14px 0 0;">Esto cambia el precio en la página. El bot de Telegram lee los mismos números de la hoja <b>Cotizador Interno</b>: si cambias algo acá, dile al bot o escríbelo también en la hoja para que los dos coticen igual.</p>
     </div>
   </section>
+  <!-- Vista previa: la salida del PDF dentro de la página, para cuando la
+       descarga del visor de Claude no está disponible. -->
+  <div class="visor" id="visor" hidden>
+    <div class="visor-caja" role="dialog" aria-modal="true" aria-label="Vista previa de la cotización">
+      <div class="visor-top">
+        <b id="visor-nombre" class="num"></b>
+        <button class="btn sec chiquito" id="visor-bajar">Descargar</button>
+        <button class="icono" id="visor-cerrar" aria-label="Cerrar vista previa">✕</button>
+      </div>
+      <iframe id="visor-marco" title="Cotización en PDF"></iframe>
+      <p class="visor-pie">Si la descarga no funciona, desde acá puedes imprimir o guardar el PDF con el visor del navegador.</p>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -558,7 +586,7 @@
       // Vacío = usar el parámetro general. Se llenan solo cuando esta
       // referencia se sale de lo normal (un plato lleva más que un pocillo).
       bizcocho: "", onzas: "", vinilo: "", empaque: "",
-      minutos_extra: "", descuento: "", notas: ""
+      minutos_acabado: "", minutos_extra: "", descuento: "", notas: ""
     };
     if (base) {
       Object.keys(i).forEach(function (k) { if (k !== "id" && k in base) i[k] = base[k]; });
@@ -596,12 +624,16 @@
     var cantidad = Math.max(1, Math.round(numero(it.cantidad, 1)));
     var dificultad = gradoAcabado(numero(it.pintado, 0), numero(it.tintas, 0), !!it.relieve);
 
-    var minAcabado = (TIEMPOS["Acabado"][it.tamano] || {})[dificultad];
+    // El estándar del Discovery tiene huecos (L fácil, XL fácil, XL difícil): ahí
+    // la referencia trae sus propios minutos en vez de quedarse bloqueada.
+    var estandar = (TIEMPOS["Acabado"][it.tamano] || {})[dificultad];
+    if (estandar === undefined) estandar = null;
+    var minAcabado = limpio(it.minutos_acabado) === "" ? estandar : numero(it.minutos_acabado, 0);
     if (minAcabado == null) {
-      return { id:it.id, dificultad:dificultad,
-               error: "Falta medir el acabado de una pieza " + it.tamano + " con dificultad " +
-                      NOMBRE_DIF[dificultad] + ". Ese tiempo hay que cronometrarlo en el taller " +
-                      "y cargarlo en Ajustes." };
+      return { id:it.id, dificultad:dificultad, estandar:null,
+               error: "No hay tiempo medido para una pieza " + it.tamano + " con acabado " +
+                      NOMBRE_DIF[dificultad] + ". Abre el detalle de esa referencia y escribe " +
+                      "los minutos de acabado, o cárgalos en Ajustes." };
     }
 
     var porEtapa = { "Acabado": minAcabado }, sinMedir = [];
@@ -667,7 +699,8 @@
 
     return {
       id:it.id, producto:limpio(it.producto), cantidad:cantidad, tamano:it.tamano,
-      dificultad:dificultad, minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa,
+      dificultad:dificultad, estandar:estandar,
+      minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa,
       valorHora:valorHora, notas:limpio(it.notas),
       costos: [
         ["Materiales", materiales], ["Mano de obra", manoObra],
@@ -868,14 +901,17 @@
     var onzas    = entrada("number", it.onzas,    { min:"0", step:"0.25", id:"o-" + it.id });
     var vinilo   = entrada("number", it.vinilo,   { min:"0", step:"100", id:"v-" + it.id });
     var empaque  = entrada("number", it.empaque,  { min:"0", step:"100", id:"e-" + it.id });
+    var minAcab  = entrada("number", it.minutos_acabado, { min:"0", step:"0.5", id:"ma-" + it.id });
     var minExtra = entrada("number", it.minutos_extra, { min:"-60", step:"1", id:"m-" + it.id });
     var descItem = entrada("number", it.descuento, { min:"0", max:"60", step:"1", id:"d-" + it.id });
-    it._placeholders = { bizcocho:bizcocho, onzas:onzas, vinilo:vinilo, empaque:empaque };
+    it._placeholders = { bizcocho:bizcocho, onzas:onzas, vinilo:vinilo, empaque:empaque,
+                         minAcab:minAcab };
 
     rej.appendChild(campo("Bizcocho $", bizcocho, "Por pieza"));
     rej.appendChild(campo("Esmalte (oz)", onzas, "Onzas por pieza"));
     rej.appendChild(campo("Vinilo $", vinilo, "0 si no lleva"));
     rej.appendChild(campo("Empaque $", empaque, "Por pieza"));
+    rej.appendChild(campo("Minutos de acabado", minAcab, "Vacío = el estándar"));
     rej.appendChild(campo("Minutos extra", minExtra, "Trabajo que no cubre el estándar"));
     rej.appendChild(campo("Descuento %", descItem, "Solo de esta referencia"));
     cuerpo.appendChild(rej);
@@ -894,7 +930,8 @@
     // ── Conexión con el estado
     var mapa = [[prod,"producto"], [cant,"cantidad"], [rango,"pintado"], [tintas,"tintas"],
                 [bizcocho,"bizcocho"], [onzas,"onzas"], [vinilo,"vinilo"], [empaque,"empaque"],
-                [minExtra,"minutos_extra"], [descItem,"descuento"], [notas,"notas"]];
+                [minAcab,"minutos_acabado"], [minExtra,"minutos_extra"],
+                [descItem,"descuento"], [notas,"notas"]];
     mapa.forEach(function (par) {
       function leer() { it[par[1]] = par[0].value; recalcular(); guardarBorrador(); }
       par[0].addEventListener("input", leer);
@@ -924,11 +961,12 @@
       ph.onzas.placeholder = String(Number(PARAMS.oz_esmalte_por_pieza) || 0);
       ph.vinilo.placeholder = String(Math.round(Number(PARAMS.costo_vinilo) || 0));
       ph.empaque.placeholder = String(Math.round(Number(PARAMS.costo_empaque) || 0));
+      ph.minAcab.placeholder = l.estandar == null ? "sin medir" : String(l.estandar);
 
       if (l.error) {
         it._card.classList.add("mal");
         it._precio.textContent = "—";
-        it._precioNota.textContent = "sin tiempo medido";
+        it._precioNota.textContent = "faltan los minutos";
         it._mini.textContent = "";
         return;
       }
@@ -977,8 +1015,7 @@
     desglose.textContent = ""; avisos.textContent = "";
 
     var hay = r.buenas.length > 0;
-    $("b-pdf").disabled = !hay;
-    $("b-guardar").disabled = !hay || puedeEscribir === false;
+    $("b-guardar").disabled = puedeEscribir === false;
 
     $("r-contexto").textContent = r.numero + " · " + r.buenas.length +
       (r.buenas.length === 1 ? " referencia · " : " referencias · ") + r.piezas + " piezas";
@@ -1153,6 +1190,96 @@
 
     pie();
     return { doc:doc, numero:r.numero };
+  }
+
+  // ── Descargar y ver ───────────────────────────────────────────────
+  // Ningún camino se queda mudo: si no se puede, se dice por qué.
+  var urlVisor = null;
+
+  var MOTIVOS_DESCARGA = {
+    declined:            "Cancelaste la descarga.",
+    rate_limited:        "Ya hay una descarga esperando respuesta. Contéstala y vuelve a intentar.",
+    too_large:           "El archivo pesa demasiado para descargarlo acá.",
+    rejected_extension:  "El visor no está aceptando archivos PDF en esta vista.",
+    extension_not_enabled: "El visor tiene apagada la descarga de PDF en esta vista. Usa «Ver PDF» y guárdalo desde ahí.",
+    bad_request:         "El archivo salió mal armado. Vuelve a intentar.",
+    unavailable:         "Las descargas no están disponibles en esta vista. Usa «Ver PDF» y guárdalo desde ahí.",
+    not_granted:         "Esta vista no tiene permiso para descargar. Usa «Ver PDF» y guárdalo desde ahí.",
+    capability_disabled: "Las descargas no están disponibles en esta vista. Usa «Ver PDF».",
+    capability_removed:  "Las descargas no están disponibles en esta vista. Usa «Ver PDF».",
+    transform_error:     "El archivo salió mal armado. Vuelve a intentar."
+  };
+
+  function porQueNoHayPDF() {
+    if (!ultimo) return "Todavía no hay nada que cotizar.";
+    var rotas = ultimo.lineas.filter(function (l) { return l.error; });
+    if (rotas.length === ultimo.lineas.length && rotas.length) return rotas[0].error;
+    return "Ponle al menos una referencia con su cantidad y su tamaño.";
+  }
+
+  function nombrePDF(r) {
+    return "Cotizacion_" + r.numero +
+      (r.cliente ? "_" + r.cliente.replace(/[^A-Za-z0-9]+/g, "_") : "") + ".pdf";
+  }
+
+  function armarPDF() {
+    if (!ultimo || !ultimo.buenas.length) { toast(porQueNoHayPDF()); return null; }
+    var salida = generarPDF(ultimo);   // ya avisa si jsPDF no cargó
+    return salida;
+  }
+
+  function descargarPDF() {
+    var salida = armarPDF();
+    if (!salida) return;
+    var nombre = nombrePDF(ultimo);
+    toast("Preparando la descarga…");
+    pedir("downloads").then(function (d) {
+      downloads = d;
+      if (!d) { sinDescarga("Esta vista no tiene descargas."); return; }
+      // El ArrayBuffer se transfiere y queda inservible: se genera uno por intento.
+      return d.save({ filename:nombre, data:salida.doc.output("arraybuffer") })
+        .then(function () { toast("PDF descargado: " + nombre); })
+        .catch(function (e) {
+          var codigo = (e && e.code) || "unavailable";
+          if (codigo === "declined" || codigo === "rate_limited") {
+            toast(MOTIVOS_DESCARGA[codigo]);
+            return;
+          }
+          sinDescarga(MOTIVOS_DESCARGA[codigo] || ("No se pudo descargar (" + codigo + ")."));
+        });
+    });
+  }
+
+  // Cuando la descarga no está disponible, el PDF se muestra dentro de la página:
+  // desde el visor del navegador se puede guardar o imprimir.
+  function sinDescarga(mensaje) {
+    toast(mensaje);
+    verPDF();
+  }
+
+  function verPDF() {
+    var salida = armarPDF();
+    if (!salida) return;
+    var fuente = "";
+    try {
+      if (urlVisor) URL.revokeObjectURL(urlVisor);
+      urlVisor = URL.createObjectURL(salida.doc.output("blob"));
+      fuente = urlVisor;
+    } catch (e) {
+      urlVisor = null;
+      // Sin blob: el PDF va embebido en la propia dirección.
+      try { fuente = salida.doc.output("datauristring"); } catch (e2) { fuente = ""; }
+    }
+    if (!fuente) { toast("No se pudo abrir la vista previa"); return; }
+    $("visor-nombre").textContent = nombrePDF(ultimo);
+    $("visor-marco").src = fuente;
+    $("visor").hidden = false;
+  }
+
+  function cerrarVisor() {
+    $("visor").hidden = true;
+    $("visor-marco").removeAttribute("src");
+    if (urlVisor) { URL.revokeObjectURL(urlVisor); urlVisor = null; }
   }
 
   // ── Borrador local (comodidad de quien está en esta pantalla) ──────
@@ -1693,32 +1820,18 @@
       toast("Cotización nueva: " + cot.numero);
     });
 
-    $("b-pdf").addEventListener("click", function () {
-      if (!ultimo || !ultimo.buenas.length) return;
-      var salida = generarPDF(ultimo);
-      if (!salida) return;
-      var nombre = "Cotizacion_" + salida.numero +
-        (ultimo.cliente ? "_" + ultimo.cliente.replace(/[^A-Za-z0-9]+/g, "_") : "") + ".pdf";
-      var datos = salida.doc.output("arraybuffer");
-      toast("Armando el PDF…");
-      pedir("downloads").then(function (d) {
-        downloads = d;
-        if (!d) {
-          salida.doc.save(nombre);   // fuera del visor de Claude sí funciona
-          toast("Si no se descargó, ábrela desde claude.ai");
-          return;
-        }
-        return d.save({ filename:nombre, data:datos })
-          .then(function () { toast("PDF listo: " + nombre); })
-          .catch(function (e) {
-            toast("La descarga no se completó" + (e && e.code ? " (" + e.code + ")" : ""));
-          });
-      });
+    $("b-pdf").addEventListener("click", function () { descargarPDF(); });
+    $("b-ver").addEventListener("click", function () { verPDF(); });
+    $("visor-cerrar").addEventListener("click", cerrarVisor);
+    $("visor").addEventListener("click", function (e) { if (e.target === $("visor")) cerrarVisor(); });
+    $("visor-bajar").addEventListener("click", function () { descargarPDF(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !$("visor").hidden) cerrarVisor();
     });
 
     $("b-guardar").addEventListener("click", function () {
       var r = ultimo;
-      if (!r || !r.buenas.length) return;
+      if (!r || !r.buenas.length) { toast(porQueNoHayPDF()); return; }
       var doc = {
         fecha: hoyISO(), numero: r.numero, cliente: r.cliente, contacto: r.contacto,
         piezas: r.piezas, referencias: r.buenas.length,
