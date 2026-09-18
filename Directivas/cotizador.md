@@ -60,6 +60,16 @@ una sola vez en `condiciones.empaque` y el motor lo divide entre las piezas del 
 así que entra al costo unitario y lleva margen como cualquier otro costo. No se pregunta
 por pieza ni se guarda como parámetro del taller: depende del pedido.
 
+## Lo que NO se costea: las experiencias
+Bosque y Cielo cotiza **dos cosas**: productos y **experiencias (Pottery Lab)**. El motor
+de este documento es solo para productos.
+
+Las experiencias no tienen motor de costos por decisión de Camilo (2026-09-18): el precio
+por persona lo pone él, y la cotización es `participantes x precio`, más el traslado
+cuando el taller es a domicilio en vez de en el taller. Viven en la pestaña **Pottery Lab**
+de la página y en `enviar_cotizacion_pottery` del bot, con su identidad propia (arcilla).
+No se guardan en el Cotizador Interno: esa hoja es de productos.
+
 ## La cadena de cálculo
 Réplica exacta de la hoja **Cotizador Interno** (pestaña *Costos Detallados*):
 

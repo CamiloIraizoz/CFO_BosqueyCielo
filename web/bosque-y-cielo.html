@@ -201,6 +201,15 @@
   .chip.atrasado { background:#F6E3E2; color:var(--crit); }
   :root[data-theme="dark"] .chip.atrasado, :root:not([data-theme="light"]) .chip.atrasado { background:#3A2624; }
 
+  /* Pottery Lab tiene su propia identidad: arcilla, la misma del PDF del bot */
+  #vista-pottery { --accent:#8E8275; --accent-deep:#6F6459; --accent-wash:#EFE8DD; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) #vista-pottery {
+      --accent:#B3A694; --accent-deep:#CDBFA9; --accent-wash:#332E27; }
+  }
+  :root[data-theme="dark"] #vista-pottery {
+    --accent:#B3A694; --accent-deep:#CDBFA9; --accent-wash:#332E27; }
+
   /* Vista previa del PDF */
   .visor { position:fixed; inset:0; z-index:60; background:rgba(46,33,31,.55);
            display:flex; align-items:center; justify-content:center; padding:18px; }
@@ -260,7 +269,8 @@
     <div class="quien" id="estado" style="margin-left:0;"></div>
   </div>
   <div class="tabs" role="tablist">
-    <button class="tab" id="tab-cotizador" role="tab" aria-selected="true" aria-controls="vista-cotizador">Cotizador</button>
+    <button class="tab" id="tab-cotizador" role="tab" aria-selected="true" aria-controls="vista-cotizador">Productos</button>
+    <button class="tab" id="tab-pottery" role="tab" aria-selected="false" aria-controls="vista-pottery">Pottery Lab</button>
     <button class="tab" id="tab-produccion" role="tab" aria-selected="false" aria-controls="vista-produccion">Producción</button>
     <button class="tab" id="tab-ajustes" role="tab" aria-selected="false" aria-controls="vista-ajustes">Ajustes</button>
   </div>
@@ -368,6 +378,88 @@
             <button class="btn fantasma" id="b-limpiar">Empezar de nuevo</button>
           </div>
           <div class="avisos" id="r-reporte"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ POTTERY LAB ════════════════════════════════════ -->
+  <section id="vista-pottery" role="tabpanel" aria-labelledby="tab-pottery" hidden>
+    <div class="cotiza">
+      <div>
+        <div class="panel">
+          <h2>La experiencia</h2>
+          <p class="pista">Acá no hay motor de costos: el precio por persona lo pones tú. La página arma los totales, el PDF y el registro.</p>
+          <div class="fila">
+            <label class="campo" for="p-cliente">
+              <span>Cliente</span>
+              <input type="text" id="p-cliente" placeholder="Colegio Bennett" autocomplete="off">
+            </label>
+            <label class="campo" for="p-contacto">
+              <span>Contacto (opcional)</span>
+              <input type="text" id="p-contacto" placeholder="Ana Ruiz · 310 000 0000" autocomplete="off">
+            </label>
+            <label class="campo" for="p-numero">
+              <span>N° de cotización</span>
+              <input type="text" id="p-numero" class="num" autocomplete="off">
+            </label>
+          </div>
+        </div>
+
+        <div class="items" id="lista-talleres"></div>
+
+        <div class="agregar">
+          <button class="btn sec" id="bp-agregar">+ Agregar taller</button>
+          <span class="conteo" id="conteo-talleres">&nbsp;</span>
+        </div>
+
+        <div class="panel">
+          <h2>Condiciones</h2>
+          <p class="pista">Lo que sale impreso al pie de la cotización.</p>
+          <div class="rejilla">
+            <label class="campo" for="p-anticipo">
+              <span>Anticipo %</span>
+              <input type="number" id="p-anticipo" class="num" min="0" max="100" step="5" value="50">
+            </label>
+            <label class="campo" for="p-validez">
+              <span>Validez (días)</span>
+              <input type="number" id="p-validez" class="num" min="1" max="120" step="1" value="15">
+            </label>
+          </div>
+          <label class="check" for="p-iva" style="margin-top:12px;">
+            <input type="checkbox" id="p-iva" checked>
+            <span>Cobrar IVA (19%)</span>
+          </label>
+          <label class="campo" for="p-pago">
+            <span>Condiciones de pago</span>
+            <input type="text" id="p-pago" value="50% para confirmar la reserva · 50% el día del taller" autocomplete="off">
+          </label>
+          <label class="campo" for="p-notas" style="margin-bottom:0;">
+            <span>Notas para el cliente</span>
+            <textarea id="p-notas" placeholder="Las piezas se entregan terminadas unas dos semanas después del taller."></textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="resultado">
+        <div class="panel">
+          <h2>La cotización</h2>
+          <p class="pista" id="rp-contexto">&nbsp;</p>
+          <div class="precio num" id="rp-precio">—</div>
+          <div class="precio-nota" id="rp-nota"></div>
+
+          <ul class="desglose" id="rp-desglose"></ul>
+
+          <div class="acciones">
+            <button class="btn" id="bp-pdf">Descargar PDF</button>
+            <button class="btn sec" id="bp-ver">Ver PDF</button>
+            <button class="btn sec" id="bp-guardar">Guardar</button>
+          </div>
+          <div class="acciones" style="margin-top:9px;">
+            <button class="btn fantasma" id="bp-bot">Copiar para el bot</button>
+            <button class="btn fantasma" id="bp-limpiar">Empezar de nuevo</button>
+          </div>
+          <div class="avisos" id="rp-reporte"></div>
         </div>
       </div>
     </div>
@@ -1207,26 +1299,12 @@
   var urlVisor = null;
   var ESPERA_DESCARGA = 9000;   // ms que se le dan al visor para responder
 
-  function reportar(texto, tipo) {
-    var caja = $("r-reporte");
-    caja.textContent = "";
+  function reportar(texto, tipo, caja) {
+    var destino = $(caja || "r-reporte");
+    destino.textContent = "";
     if (!texto) return;
-    caja.appendChild(aviso({ texto:texto, duro:tipo === "mal" }));
+    destino.appendChild(aviso({ texto:texto, duro:tipo === "mal" }));
   }
-
-  var MOTIVOS_DESCARGA = {
-    declined:            "Cancelaste la descarga.",
-    rate_limited:        "Ya hay una descarga esperando respuesta. Contéstala y vuelve a intentar.",
-    too_large:           "El archivo pesa demasiado para descargarlo acá.",
-    rejected_extension:  "El visor no está aceptando archivos PDF en esta vista.",
-    extension_not_enabled: "El visor tiene apagada la descarga de PDF en esta vista. Usa «Ver PDF» y guárdalo desde ahí.",
-    bad_request:         "El archivo salió mal armado. Vuelve a intentar.",
-    unavailable:         "Las descargas no están disponibles en esta vista. Usa «Ver PDF» y guárdalo desde ahí.",
-    not_granted:         "Esta vista no tiene permiso para descargar. Usa «Ver PDF» y guárdalo desde ahí.",
-    capability_disabled: "Las descargas no están disponibles en esta vista. Usa «Ver PDF».",
-    capability_removed:  "Las descargas no están disponibles en esta vista. Usa «Ver PDF».",
-    transform_error:     "El archivo salió mal armado. Vuelve a intentar."
-  };
 
   function porQueNoHayPDF() {
     if (!ultimo) return "Todavía no hay nada que cotizar.";
@@ -1235,9 +1313,15 @@
     return "Ponle al menos una referencia con su cantidad y su tamaño.";
   }
 
-  function nombrePDF(r) {
-    return "Cotizacion_" + r.numero +
-      (r.cliente ? "_" + r.cliente.replace(/[^A-Za-z0-9]+/g, "_") : "") + ".pdf";
+  function nombreArchivo(numero, cliente) {
+    return "Cotizacion_" + numero +
+      (cliente ? "_" + cliente.replace(/[^A-Za-z0-9]+/g, "_") : "") + ".pdf";
+  }
+
+  function hayJsPDF(caja) {
+    if ((window.jspdf || {}).jsPDF) return true;
+    reportar("No cargó la librería que arma el PDF (jsPDF). Recarga la página.", "mal", caja);
+    return false;
   }
 
   function armarPDF() {
@@ -1246,26 +1330,16 @@
     return salida;
   }
 
-  function descargarPDF() {
-    var salida;
-    try {
-      salida = armarPDF();
-    } catch (e) {
-      reportar("El PDF no se pudo armar: " + (e && e.message ? e.message : e), "mal");
-      return;
-    }
-    if (!salida) return;
-
-    var nombre = nombrePDF(ultimo);
-    reportar("");
+  // ── Bajar y ver: un solo camino para productos y para Pottery Lab ──
+  function bajarPDF(doc, nombre, caja) {
+    reportar("", null, caja);
     toast("Preparando la descarga…");
-
     pedir("downloads").then(function (d) {
       downloads = d;
-      if (!d) { sinDescarga("Esta vista no tiene permiso para descargar archivos."); return; }
+      if (!d) { sinDescarga("Esta vista no tiene permiso para descargar archivos.", doc, nombre, caja); return; }
 
       // El ArrayBuffer se transfiere y queda inservible: uno nuevo por intento.
-      var guardado = d.save({ filename:nombre, data:salida.doc.output("arraybuffer") });
+      var guardado = d.save({ filename:nombre, data:doc.output("arraybuffer") });
 
       // Si el visor abre su confirmación donde no se ve, la promesa no se
       // resuelve nunca y la página se queda callada. Por eso el plazo.
@@ -1275,55 +1349,66 @@
 
       return Promise.race([guardado, aTiempo])
         .then(function () {
-          reportar("");
+          reportar("", null, caja);
           toast("PDF descargado: " + nombre);
         })
         .catch(function (e) {
           var codigo = (e && e.code) || "unavailable";
           if (codigo === "declined" || codigo === "rate_limited") {
             toast(MOTIVOS_DESCARGA[codigo]);
-            reportar(MOTIVOS_DESCARGA[codigo]);
+            reportar(MOTIVOS_DESCARGA[codigo], null, caja);
             return;
           }
           if (codigo === "sin_respuesta") {
             sinDescarga("El visor no respondió a la descarga. Te abrí la cotización acá: " +
-                        "guárdala o imprímela desde el visor del navegador. Si la abres en " +
-                        "claude.ai directamente, el botón de descargar sí funciona.");
+                        "guárdala o imprímela desde el visor del navegador.", doc, nombre, caja);
             return;
           }
           sinDescarga(MOTIVOS_DESCARGA[codigo] ||
                       ("No se pudo descargar (" + codigo + "): " +
-                       ((e && e.message) || "sin detalle") + "."));
+                       ((e && e.message) || "sin detalle") + "."), doc, nombre, caja);
         });
     }).catch(function (e) {
-      reportar("No se pudo pedir la descarga: " + ((e && e.message) || e), "mal");
+      reportar("No se pudo pedir la descarga: " + ((e && e.message) || e), "mal", caja);
     });
   }
 
-  // Cuando la descarga no está disponible, el PDF se muestra dentro de la página:
-  // desde el visor del navegador se puede guardar o imprimir.
-  function sinDescarga(mensaje) {
-    reportar(mensaje, "mal");
-    verPDF();
+  function sinDescarga(mensaje, doc, nombre, caja) {
+    reportar(mensaje, "mal", caja);
+    mostrarPDF(doc, nombre, caja);
   }
 
-  function verPDF() {
-    var salida = armarPDF();
-    if (!salida) return;
+  // El PDF dentro de la página: desde el visor del navegador se guarda o imprime.
+  function mostrarPDF(doc, nombre, caja) {
     var fuente = "";
     try {
       if (urlVisor) URL.revokeObjectURL(urlVisor);
-      urlVisor = URL.createObjectURL(salida.doc.output("blob"));
+      urlVisor = URL.createObjectURL(doc.output("blob"));
       fuente = urlVisor;
     } catch (e) {
       urlVisor = null;
-      // Sin blob: el PDF va embebido en la propia dirección.
-      try { fuente = salida.doc.output("datauristring"); } catch (e2) { fuente = ""; }
+      try { fuente = doc.output("datauristring"); } catch (e2) { fuente = ""; }
     }
-    if (!fuente) { toast("No se pudo abrir la vista previa"); return; }
-    $("visor-nombre").textContent = nombrePDF(ultimo);
+    if (!fuente) { reportar("No se pudo abrir la vista previa", "mal", caja); return; }
+    $("visor-nombre").textContent = nombre;
     $("visor-marco").src = fuente;
     $("visor").hidden = false;
+  }
+
+  function descargarPDF() {
+    var salida;
+    try { salida = armarPDF(); }
+    catch (e) { reportar("El PDF no se pudo armar: " + (e && e.message ? e.message : e), "mal"); return; }
+    if (!salida) return;
+    bajarPDF(salida.doc, nombreArchivo(ultimo.numero, ultimo.cliente), "r-reporte");
+  }
+
+  function verPDF() {
+    var salida;
+    try { salida = armarPDF(); }
+    catch (e) { reportar("El PDF no se pudo armar: " + (e && e.message ? e.message : e), "mal"); return; }
+    if (!salida) return;
+    mostrarPDF(salida.doc, nombreArchivo(ultimo.numero, ultimo.cliente), "r-reporte");
   }
 
   function cerrarVisor() {
@@ -1332,10 +1417,6 @@
     if (urlVisor) { URL.revokeObjectURL(urlVisor); urlVisor = null; }
   }
 
-  // ── Pasarle la cotización al bot ──────────────────────────────────
-  // La página guarda en su propia base; al Cotizador Interno (Google Sheets)
-  // solo escribe el bot. Este texto es el puente: se pega en Telegram y el bot
-  // deja la hoja con el desglose.
   function textoParaBot(r) {
     var c = r.cond, lineas = ["COTIZACIÓN BOSQUE Y CIELO " + r.numero];
     lineas.push("Cliente: " + (r.cliente || "sin cliente") +
@@ -1391,8 +1472,8 @@
   }
 
   // Si el portapapeles está bloqueado, el texto se muestra para copiarlo a mano.
-  function aMano(texto) {
-    var caja = $("r-reporte");
+  function aMano(texto, cajaId) {
+    var caja = $(cajaId || "r-reporte");
     caja.textContent = "";
     var nota = document.createElement("div"); nota.className = "aviso";
     nota.textContent = "Copia este texto y pégaselo al bot en Telegram:";
@@ -1514,6 +1595,505 @@
           puedeEscribir = false; pintarAjustes();
           toast("No tienes permiso para cambiar los ajustes");
         } else { toast("No se pudieron guardar los ajustes"); }
+      });
+    });
+  }
+
+  // ══ POTTERY LAB ═══════════════════════════════════════════════════
+  // Las experiencias NO se costean: el precio por persona lo pone Camilo
+  // (decisión del 2026-09-18). La página solo multiplica, arma el PDF y guarda.
+  var ARCILLA = [142, 130, 117], ARCILLA_CREMA = [245, 240, 232], ARCILLA_SUAVE = [122, 110, 100];
+  var pot = null, ultimoPot = null;
+  var MAX_TALLERES = 10;
+  var seqPot = 0;
+
+  function tallerNuevo(base) {
+    seqPot += 1;
+    var t = { id:"t" + seqPot, nombre:"", participantes:12, precio:"", fecha:"",
+              lugar:"taller", traslado:"", incluye:"" };
+    if (base) Object.keys(t).forEach(function (k) { if (k !== "id" && k in base) t[k] = base[k]; });
+    return t;
+  }
+
+  function cotizacionPotteryNueva() {
+    return {
+      numero: nuevoNumero(), cliente:"", contacto:"", notas:"",
+      talleres: [tallerNuevo()],
+      cond: { iva:true, anticipo:50, validez:15,
+              pago:"50% para confirmar la reserva · 50% el día del taller" }
+    };
+  }
+
+  function calcularPottery() {
+    var c = pot, lineas = [], personas = 0, subtotal = 0, traslados = 0;
+    c.talleres.forEach(function (t, i) {
+      var cuantos = Math.max(0, Math.round(numero(t.participantes, 0)));
+      var precio = Math.max(0, numero(t.precio, 0));
+      var envio = t.lugar === "domicilio" ? Math.max(0, numero(t.traslado, 0)) : 0;
+      var total = cuantos * precio + envio;
+      personas += cuantos; subtotal += cuantos * precio; traslados += envio;
+      lineas.push({ id:t.id, nombre:limpio(t.nombre), participantes:cuantos, precio:precio,
+                    fecha:t.fecha, lugar:t.lugar, traslado:envio, incluye:limpio(t.incluye),
+                    total:total, completo: cuantos > 0 && precio > 0 });
+    });
+    var buenas = lineas.filter(function (l) { return l.completo; });
+    var base = subtotal + traslados;
+    var iva = c.cond.iva ? base * Number(PARAMS.iva_pct) / 100 : 0;
+    var total = base + iva;
+    return {
+      numero:limpio(c.numero) || nuevoNumero(), cliente:limpio(c.cliente),
+      contacto:limpio(c.contacto), notas:limpio(c.notas), cond:c.cond,
+      lineas:lineas, buenas:buenas, personas:personas,
+      subtotal:subtotal, traslados:traslados, base:base, iva:iva, total:total,
+      anticipo: total * numero(c.cond.anticipo, 0) / 100
+    };
+  }
+
+  function pintarTalleres() {
+    var cont = $("lista-talleres");
+    cont.textContent = "";
+    pot.talleres.forEach(function (t, i) { cont.appendChild(tarjetaTaller(t, i)); });
+    $("conteo-talleres").textContent = pot.talleres.length +
+      (pot.talleres.length === 1 ? " taller" : " talleres");
+    $("bp-agregar").disabled = pot.talleres.length >= MAX_TALLERES;
+    recalcularPottery();
+  }
+
+  function tarjetaTaller(t, indice) {
+    var card = document.createElement("article");
+    card.className = "item";
+    t._card = card;
+
+    var top = document.createElement("div"); top.className = "i-top";
+    var n = document.createElement("div"); n.className = "i-n num"; n.textContent = indice + 1;
+    top.appendChild(n);
+
+    var nombre = entrada("text", t.nombre, { placeholder:"Taller de torno", autocomplete:"off",
+                                             id:"tn-" + t.id });
+    var lNombre = campo("Experiencia", nombre);
+    lNombre.className = "campo i-prod"; lNombre.style.marginBottom = "0";
+    top.appendChild(lNombre);
+
+    var precio = document.createElement("div"); precio.className = "i-precio";
+    var pb = document.createElement("b"); pb.className = "num";
+    var ps = document.createElement("small");
+    precio.appendChild(pb); precio.appendChild(ps);
+    t._precio = pb; t._precioNota = ps;
+    top.appendChild(precio);
+
+    var herr = document.createElement("div"); herr.className = "i-herr";
+    var dup = document.createElement("button");
+    dup.type = "button"; dup.className = "icono"; dup.textContent = "⧉";
+    dup.title = "Duplicar este taller"; dup.setAttribute("aria-label", "Duplicar taller");
+    dup.addEventListener("click", function () {
+      if (pot.talleres.length >= MAX_TALLERES) { toast("Máximo " + MAX_TALLERES + " talleres"); return; }
+      pot.talleres.splice(pot.talleres.indexOf(t) + 1, 0, tallerNuevo(t));
+      pintarTalleres(); guardarBorradorPottery();
+    });
+    var quitar = document.createElement("button");
+    quitar.type = "button"; quitar.className = "icono"; quitar.textContent = "✕";
+    quitar.title = "Quitar este taller"; quitar.setAttribute("aria-label", "Quitar taller");
+    quitar.addEventListener("click", function () {
+      if (pot.talleres.length === 1) { toast("La cotización necesita al menos un taller"); return; }
+      pot.talleres.splice(pot.talleres.indexOf(t), 1);
+      pintarTalleres(); guardarBorradorPottery();
+    });
+    herr.appendChild(dup); herr.appendChild(quitar);
+    top.appendChild(herr);
+    card.appendChild(top);
+
+    // Personas, precio y fecha
+    var rej = document.createElement("div"); rej.className = "rejilla";
+    var gente = entrada("number", t.participantes, { min:"1", step:"1", id:"tp-" + t.id });
+    var valor = entrada("number", t.precio, { min:"0", step:"1000", id:"tv-" + t.id });
+    var fecha = entrada("date", t.fecha, { id:"tf-" + t.id });
+    rej.appendChild(campo("Participantes", gente));
+    rej.appendChild(campo("Precio por persona $", valor));
+    rej.appendChild(campo("Fecha (opcional)", fecha));
+    card.appendChild(rej);
+
+    // Dónde
+    var fila = document.createElement("div"); fila.className = "i-linea";
+    var seg = document.createElement("div"); seg.className = "segmented";
+    seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Dónde se hace");
+    var lugares = [["taller", "En nuestro taller"], ["domicilio", "A domicilio"]];
+    lugares.forEach(function (par) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "seg";
+      b.textContent = par[1];
+      b.setAttribute("aria-pressed", String(t.lugar === par[0]));
+      b.addEventListener("click", function () {
+        t.lugar = par[0];
+        Array.prototype.forEach.call(seg.children, function (otro, i) {
+          otro.setAttribute("aria-pressed", String(lugares[i][0] === par[0]));
+        });
+        t._traslado.hidden = t.lugar !== "domicilio";
+        recalcularPottery(); guardarBorradorPottery();
+      });
+      seg.appendChild(b);
+    });
+    fila.appendChild(seg);
+    card.appendChild(fila);
+
+    var traslado = entrada("number", t.traslado, { min:"0", step:"1000", id:"tt-" + t.id });
+    var lTraslado = campo("Traslado o montaje $", traslado, "Se cobra una vez, no por persona");
+    lTraslado.hidden = t.lugar !== "domicilio";
+    lTraslado.style.marginBottom = "0";
+    t._traslado = lTraslado;
+    card.appendChild(lTraslado);
+
+    var incluye = entrada("text", t.incluye, { autocomplete:"off", id:"ti-" + t.id,
+      placeholder:"Materiales · pieza en bizcocho · horneada · entrega en 2 semanas" });
+    var lIncluye = campo("Qué incluye (sale en el PDF)", incluye);
+    lIncluye.style.marginBottom = "0";
+    card.appendChild(lIncluye);
+
+    [[nombre,"nombre"], [gente,"participantes"], [valor,"precio"], [fecha,"fecha"],
+     [traslado,"traslado"], [incluye,"incluye"]].forEach(function (par) {
+      function leer() { t[par[1]] = par[0].value; recalcularPottery(); guardarBorradorPottery(); }
+      par[0].addEventListener("input", leer);
+      par[0].addEventListener("change", leer);
+    });
+    return card;
+  }
+
+  function recalcularPottery() {
+    if (!pot) return;
+    var r = calcularPottery();
+    ultimoPot = r;
+
+    pot.talleres.forEach(function (t) {
+      if (!t._card) return;
+      var l = r.lineas.filter(function (x) { return x.id === t.id; })[0];
+      if (!l) return;
+      if (!l.completo) {
+        t._card.classList.add("mal");
+        t._precio.textContent = "—";
+        t._precioNota.textContent = "falta el precio o las personas";
+        return;
+      }
+      t._card.classList.remove("mal");
+      t._precio.textContent = pesos(l.total);
+      t._precioNota.textContent = l.participantes + " x " + pesos(l.precio) +
+        (l.traslado ? " + traslado" : "");
+    });
+
+    var desglose = $("rp-desglose");
+    desglose.textContent = "";
+    var hay = r.buenas.length > 0;
+
+    $("rp-contexto").textContent = r.numero + " · " + r.buenas.length +
+      (r.buenas.length === 1 ? " taller · " : " talleres · ") + r.personas + " personas";
+    $("rp-precio").textContent = hay ? pesos(r.total) : "—";
+    $("rp-nota").textContent = hay
+      ? (r.cond.iva ? "con IVA · " : "sin IVA · ") + pesos(r.base) + " antes de IVA"
+      : "Escribe participantes y precio por persona";
+
+    r.buenas.forEach(function (l, i) {
+      desglose.appendChild(linea((l.nombre || "Taller " + (i + 1)) + " × " + l.participantes,
+                                 pesos(l.total), "ref"));
+    });
+    if (hay) {
+      desglose.appendChild(linea("Subtotal", pesos(r.subtotal), "suave"));
+      if (r.traslados) desglose.appendChild(linea("Traslados", pesos(r.traslados), "suave"));
+      if (r.iva) desglose.appendChild(linea("IVA (" + PARAMS.iva_pct + "%)", pesos(r.iva), "suave"));
+      desglose.appendChild(linea("Total", pesos(r.total), "total"));
+      if (r.anticipo) desglose.appendChild(linea("Anticipo " + r.cond.anticipo + "%", pesos(r.anticipo), "suave"));
+    }
+  }
+
+  // ── El PDF de Pottery Lab ─────────────────────────────────────────
+  function generarPDFPottery(r) {
+    if (!hayJsPDF("rp-reporte")) return null;
+    var doc = new window.jspdf.jsPDF({ unit:"pt", format:"a4" });
+    var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+    var M = 42, x2 = W - M, colGente = M + 300, colUnit = M + 400;
+    var y = 0;
+
+    function pie() {
+      var yp = H - 52;
+      doc.setDrawColor(221, 213, 204); doc.line(M, yp - 16, x2, yp - 16);
+      doc.setFont("times", "italic"); doc.setFontSize(10);
+      doc.setTextColor(ARCILLA[0], ARCILLA[1], ARCILLA[2]);
+      doc.text("Las manos aprenden lo que la cabeza todavía no sabe.", W / 2, yp, { align:"center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+      doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]);
+      doc.text("Precios en pesos colombianos (COP) · hola@bosqueycielo.com · 310 492 5416",
+               W / 2, yp + 14, { align:"center" });
+    }
+
+    doc.setFillColor(ARCILLA[0], ARCILLA[1], ARCILLA[2]); doc.rect(0, 0, W, 96, "F");
+    doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(24);
+    doc.text("Pottery Lab", M, 46);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("BOSQUE Y CIELO", M, 62);
+    doc.setFontSize(8.5);
+    ["www.bosqueycielo.com", "KR 34 # 5B-61 LC 103 · Cali, Valle",
+     "Cel: 310 492 5416 · NIT: 901.481.694-2"].forEach(function (t, i) {
+      doc.text(t, x2, 36 + i * 13, { align:"right" });
+    });
+
+    doc.setFillColor(ARCILLA_CREMA[0], ARCILLA_CREMA[1], ARCILLA_CREMA[2]);
+    doc.rect(0, 96, W, 52, "F");
+    doc.setTextColor(61, 51, 44); doc.setFont("times", "normal"); doc.setFontSize(19);
+    doc.text("Cotización de experiencia", M, 128);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+    doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]);
+    doc.text("N° COTIZACIÓN", x2 - 145, 118); doc.text("FECHA", x2, 118, { align:"right" });
+    doc.setFontSize(10); doc.setTextColor(111, 100, 89);
+    doc.text(r.numero, x2 - 145, 132);
+    doc.text(fechaCorta(hoyISO()), x2, 132, { align:"right" });
+
+    y = 180;
+    doc.setTextColor(61, 51, 44); doc.setFont("times", "normal"); doc.setFontSize(12);
+    doc.text(r.cliente ? "Para " + r.cliente : "Cotización interna", M, y);
+    if (r.contacto) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+      doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]);
+      doc.text(r.contacto, M, y + 14);
+      y += 14;
+    }
+    y += 22;
+
+    doc.setFillColor(ARCILLA[0], ARCILLA[1], ARCILLA[2]); doc.rect(M, y, x2 - M, 22, "F");
+    doc.setTextColor(255); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+    doc.text("EXPERIENCIA", M + 10, y + 14);
+    doc.text("PERSONAS", colGente, y + 14, { align:"right" });
+    doc.text("P. PERSONA", colUnit, y + 14, { align:"right" });
+    doc.text("TOTAL", x2 - 10, y + 14, { align:"right" });
+    y += 22;
+
+    r.buenas.forEach(function (l, i) {
+      var detalle = [];
+      if (l.fecha) detalle.push(fechaCorta(l.fecha));
+      detalle.push(l.lugar === "domicilio" ? "a domicilio" : "en nuestro taller");
+      if (l.traslado) detalle.push("traslado " + pesos(l.traslado));
+      var alto = l.incluye ? 48 : 36;
+      if (y + alto > H - 96) { pie(); doc.addPage(); y = 78; }
+      if (i % 2 === 1) {
+        doc.setFillColor(250, 247, 242); doc.rect(M, y, x2 - M, alto, "F");
+      }
+      doc.setTextColor(61, 51, 44); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      doc.text(doc.splitTextToSize(l.nombre || "Experiencia en cerámica", 250)[0], M + 10, y + 16);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]);
+      doc.text(detalle.join(" · "), M + 10, y + 28);
+      if (l.incluye) doc.text(doc.splitTextToSize("Incluye: " + l.incluye, 250)[0], M + 10, y + 40);
+
+      doc.setFontSize(10); doc.setTextColor(61, 51, 44);
+      doc.text(String(l.participantes), colGente, y + 16, { align:"right" });
+      doc.text(pesos(l.precio), colUnit, y + 16, { align:"right" });
+      doc.setFont("helvetica", "bold");
+      doc.text(pesos(l.total), x2 - 10, y + 16, { align:"right" });
+      y += alto;
+      doc.setDrawColor(221, 213, 204); doc.line(M, y, x2, y);
+    });
+
+    if (y + 170 > H - 80) { pie(); doc.addPage(); y = 78; } else { y += 20; }
+
+    function total(etiqueta, valor) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]);
+      doc.text(etiqueta, colUnit, y, { align:"right" });
+      doc.setTextColor(61, 51, 44);
+      doc.text(valor, x2 - 10, y, { align:"right" });
+      y += 18;
+    }
+    total("Subtotal", pesos(r.subtotal));
+    if (r.traslados) total("Traslados", pesos(r.traslados));
+    if (r.iva) total("IVA (" + PARAMS.iva_pct + "%)", pesos(r.iva));
+
+    y += 4;
+    doc.setFillColor(ARCILLA[0], ARCILLA[1], ARCILLA[2]); doc.rect(M, y, x2 - M, 34, "F");
+    doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(14);
+    doc.text("TOTAL", M + 10, y + 22);
+    doc.text(pesos(r.total), x2 - 10, y + 22, { align:"right" });
+    y += 64;
+
+    doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("CONDICIONES DE PAGO", M, y);
+    doc.setTextColor(61, 51, 44); doc.setFontSize(10);
+    doc.text(doc.splitTextToSize(String(r.cond.pago || ""), 330)[0], M, y + 14);
+    doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]); doc.setFontSize(8);
+    doc.text("VALIDEZ", M + 390, y);
+    doc.setTextColor(61, 51, 44); doc.setFontSize(10);
+    doc.text(Math.round(numero(r.cond.validez, 0)) + " días", M + 390, y + 14);
+    y += 42;
+
+    if (r.notas) {
+      doc.setTextColor(ARCILLA_SUAVE[0], ARCILLA_SUAVE[1], ARCILLA_SUAVE[2]); doc.setFontSize(8);
+      doc.text("NOTAS", M, y);
+      doc.setTextColor(61, 51, 44); doc.setFontSize(9.5);
+      doc.splitTextToSize(r.notas, x2 - M).slice(0, 4).forEach(function (t, i) {
+        doc.text(t, M, y + 14 + i * 12);
+      });
+    }
+
+    pie();
+    return { doc:doc, numero:r.numero };
+  }
+
+  function armarPDFPottery() {
+    if (!ultimoPot || !ultimoPot.buenas.length) {
+      reportar("Ponle a cada taller cuántas personas son y el precio por persona.", "mal", "rp-reporte");
+      return null;
+    }
+    return generarPDFPottery(ultimoPot);
+  }
+
+  // ── Texto para el bot ─────────────────────────────────────────────
+  function textoPotteryParaBot(r) {
+    var lineas = ["COTIZACIÓN POTTERY LAB " + r.numero];
+    lineas.push("Cliente: " + (r.cliente || "sin cliente") +
+                (r.contacto ? " (" + r.contacto + ")" : ""));
+    r.buenas.forEach(function (l, i) {
+      var partes = [(l.nombre || "Taller " + (i + 1)),
+                    "participantes " + l.participantes,
+                    "precio_por_persona " + l.precio,
+                    (l.lugar === "domicilio" ? "a domicilio" : "en el taller")];
+      if (l.fecha) partes.push("fecha " + fechaCorta(l.fecha));
+      if (l.traslado) partes.push("traslado " + l.traslado);
+      if (l.incluye) partes.push("incluye: " + l.incluye);
+      lineas.push((i + 1) + ". " + partes.join(" · ") + " → " + pesos(l.total));
+    });
+    lineas.push("Condiciones: " + (r.cond.pago || "") + " · validez " +
+                numero(r.cond.validez, 0) + " días · IVA " + (r.cond.iva ? "sí" : "no"));
+    if (r.notas) lineas.push("Notas: " + r.notas);
+    lineas.push("Total: " + pesos(r.total) + " (" + r.personas + " personas)");
+    lineas.push("Envíala con enviar_cotizacion_pottery.");
+    return lineas.join("\n");
+  }
+
+  // ── Borrador ──────────────────────────────────────────────────────
+  function guardarBorradorPottery() {
+    try {
+      var copia = { numero:pot.numero, cliente:pot.cliente, contacto:pot.contacto,
+                    notas:pot.notas, cond:pot.cond,
+                    talleres: pot.talleres.map(function (t) {
+                      var plano = {};
+                      Object.keys(t).forEach(function (k) { if (k.charAt(0) !== "_") plano[k] = t[k]; });
+                      return plano;
+                    }) };
+      localStorage.setItem("byc-borrador-pottery", JSON.stringify(copia));
+    } catch (e) {}
+  }
+
+  function leerBorradorPottery() {
+    try {
+      var crudo = localStorage.getItem("byc-borrador-pottery");
+      if (!crudo) return null;
+      var d = JSON.parse(crudo);
+      if (!d || !d.talleres || !d.talleres.length) return null;
+      d.talleres = d.talleres.map(function (t) { return tallerNuevo(t); });
+      d.cond = d.cond || cotizacionPotteryNueva().cond;
+      return d;
+    } catch (e) { return null; }
+  }
+
+  function conectarPottery() {
+    [["p-cliente","cliente"], ["p-contacto","contacto"], ["p-numero","numero"],
+     ["p-notas","notas"]].forEach(function (par) {
+      var el = $(par[0]);
+      el.value = pot[par[1]] || "";
+      el.oninput = function () { pot[par[1]] = el.value; recalcularPottery(); guardarBorradorPottery(); };
+    });
+    [["p-anticipo","anticipo"], ["p-validez","validez"], ["p-pago","pago"]].forEach(function (par) {
+      var el = $(par[0]);
+      el.value = pot.cond[par[1]];
+      el.oninput = function () {
+        pot.cond[par[1]] = el.type === "number" ? numero(el.value, 0) : el.value;
+        recalcularPottery(); guardarBorradorPottery();
+      };
+    });
+    var iva = $("p-iva");
+    iva.checked = pot.cond.iva !== false;
+    iva.onchange = function () { pot.cond.iva = iva.checked; recalcularPottery(); guardarBorradorPottery(); };
+  }
+
+  function accionesPottery() {
+    $("bp-agregar").addEventListener("click", function () {
+      if (pot.talleres.length >= MAX_TALLERES) return;
+      pot.talleres.push(tallerNuevo());
+      pintarTalleres(); guardarBorradorPottery();
+    });
+
+    $("bp-limpiar").addEventListener("click", function () {
+      pot = cotizacionPotteryNueva();
+      conectarPottery(); pintarTalleres(); guardarBorradorPottery();
+      reportar("", null, "rp-reporte");
+      toast("Cotización nueva: " + pot.numero);
+    });
+
+    $("bp-pdf").addEventListener("click", function () {
+      var salida;
+      try { salida = armarPDFPottery(); }
+      catch (e) { reportar("El PDF no se pudo armar: " + ((e && e.message) || e), "mal", "rp-reporte"); return; }
+      if (!salida) return;
+      bajarPDF(salida.doc, nombreArchivo("PotteryLab_" + ultimoPot.numero, ultimoPot.cliente), "rp-reporte");
+    });
+
+    $("bp-ver").addEventListener("click", function () {
+      var salida;
+      try { salida = armarPDFPottery(); }
+      catch (e) { reportar("El PDF no se pudo armar: " + ((e && e.message) || e), "mal", "rp-reporte"); return; }
+      if (!salida) return;
+      mostrarPDF(salida.doc, nombreArchivo("PotteryLab_" + ultimoPot.numero, ultimoPot.cliente), "rp-reporte");
+    });
+
+    $("bp-bot").addEventListener("click", function () {
+      var r = ultimoPot;
+      if (!r || !r.buenas.length) {
+        reportar("Ponle a cada taller cuántas personas son y el precio por persona.", "mal", "rp-reporte");
+        return;
+      }
+      var texto = textoPotteryParaBot(r);
+      var listo = function () {
+        reportar("Copiado. Pégalo en el chat del bot y él la manda por correo.", null, "rp-reporte");
+        toast("Copiado para el bot");
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(texto).then(listo)
+            .catch(function () { aMano(texto, "rp-reporte"); });
+          return;
+        }
+      } catch (e) {}
+      aMano(texto, "rp-reporte");
+    });
+
+    $("bp-guardar").addEventListener("click", function () {
+      var r = ultimoPot;
+      if (!r || !r.buenas.length) {
+        reportar("Ponle a cada taller cuántas personas son y el precio por persona.", "mal", "rp-reporte");
+        return;
+      }
+      var doc = {
+        tipo: "pottery", fecha: hoyISO(), numero: r.numero, cliente: r.cliente,
+        contacto: r.contacto, personas: r.personas, talleres: r.buenas.length,
+        lineas: r.buenas.map(function (l) {
+          return { nombre:l.nombre, participantes:l.participantes, precio:l.precio,
+                   fecha:l.fecha, lugar:l.lugar, traslado:l.traslado,
+                   incluye:l.incluye, total:Math.round(l.total) };
+        }),
+        condiciones: r.cond, notas: r.notas,
+        subtotal: Math.round(r.subtotal), traslados: Math.round(r.traslados),
+        iva: Math.round(r.iva), total: Math.round(r.total),
+        creado_en: new Date().toISOString()
+      };
+      if (miId) doc.creado_por = miId;
+      pedir("db").then(function (d) {
+        if (!d) { reportar("No hay conexión con la base: no se guardó.", "mal", "rp-reporte"); return; }
+        db = d;
+        return d.collection("cotizaciones").add(doc)
+          .then(function () {
+            toast("Cotización " + r.numero + " guardada");
+            reportar("Guardada en la base de esta página.", null, "rp-reporte");
+          })
+          .catch(function (e) {
+            reportar("No se pudo guardar" + (e && e.code ? " (" + e.code + ")" : "") + ".",
+                     "mal", "rp-reporte");
+          });
       });
     });
   }
@@ -2029,8 +2609,8 @@
       });
     });
 
-    var pestanas = [["tab-cotizador","vista-cotizador"], ["tab-produccion","vista-produccion"],
-                    ["tab-ajustes","vista-ajustes"]];
+    var pestanas = [["tab-cotizador","vista-cotizador"], ["tab-pottery","vista-pottery"],
+                    ["tab-produccion","vista-produccion"], ["tab-ajustes","vista-ajustes"]];
     pestanas.forEach(function (par) {
       $(par[0]).addEventListener("click", function () {
         pestanas.forEach(function (p) {
@@ -2044,7 +2624,7 @@
     });
     try {
       var guardada = localStorage.getItem("amphora-tab");
-      if (guardada === "tab-produccion" || guardada === "tab-ajustes") $(guardada).click();
+      if (guardada && guardada !== "tab-cotizador" && $(guardada)) $(guardada).click();
     } catch (e) {}
   }
 
@@ -2159,9 +2739,13 @@
   }
 
   cot = leerBorrador() || cotizacionNueva();
+  pot = leerBorradorPottery() || cotizacionPotteryNueva();
   conectarCabecera();
   conectarAcciones();
+  conectarPottery();
+  accionesPottery();
   pintarItems();
+  pintarTalleres();
   pintarAjustes();
   pintarProyectos();
   conectarCapacidades();

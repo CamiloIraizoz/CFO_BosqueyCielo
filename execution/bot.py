@@ -682,6 +682,11 @@ LA PÁGINA: Camilo y Daniela también cotizan desde https://claude.ai/artifact/7
 (la página de Bosque y Cielo). Usa la misma fórmula, así que los precios deben coincidir. Si alguien
 pregunta por "la página" o "el cotizador visual", es esa.
 
+PEGADO DESDE LA PÁGINA — POTTERY LAB: si el mensaje empieza con "COTIZACIÓN POTTERY LAB",
+es una experiencia armada en la página. Las experiencias NO se costean (el precio por
+persona lo pone Camilo): solo confirma los datos y mándala con enviar_cotizacion_pottery.
+No la guardes en el Cotizador Interno — esa hoja es de productos.
+
 PEGADO DESDE LA PÁGINA: si el mensaje empieza con "COTIZACIÓN BOSQUE Y CIELO", es una cotización
 armada allá que Camilo quiere en el Cotizador Interno. La página guarda en su propia base,
 no en el Sheet: escribirla es tu trabajo. Lee las referencias con sus datos (cantidad,
