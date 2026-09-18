@@ -360,6 +360,7 @@
             <button class="btn sec" id="b-guardar">Guardar</button>
             <button class="btn fantasma" id="b-limpiar">Empezar de nuevo</button>
           </div>
+          <div class="avisos" id="r-reporte"></div>
         </div>
       </div>
     </div>
@@ -1047,7 +1048,11 @@
 
   function generarPDF(r) {
     var jsPDF = (window.jspdf || {}).jsPDF;
-    if (!jsPDF) { toast("No se pudo cargar el generador de PDF"); return null; }
+    if (!jsPDF) {
+      reportar("No cargó la librería que arma el PDF (jsPDF, desde cdnjs.cloudflare.com). " +
+               "Suele ser la conexión o un bloqueador: recarga la página.", "mal");
+      return null;
+    }
     var doc = new jsPDF({ unit:"pt", format:"a4" });
     var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
     var M = 42, x2 = W - M;
@@ -1193,8 +1198,17 @@
   }
 
   // ── Descargar y ver ───────────────────────────────────────────────
-  // Ningún camino se queda mudo: si no se puede, se dice por qué.
+  // Ningún camino se queda mudo: si no se puede, se dice por qué — y el
+  // aviso se queda en pantalla, porque un toast se va antes de leerlo.
   var urlVisor = null;
+  var ESPERA_DESCARGA = 9000;   // ms que se le dan al visor para responder
+
+  function reportar(texto, tipo) {
+    var caja = $("r-reporte");
+    caja.textContent = "";
+    if (!texto) return;
+    caja.appendChild(aviso({ texto:texto, duro:tipo === "mal" }));
+  }
 
   var MOTIVOS_DESCARGA = {
     declined:            "Cancelaste la descarga.",
@@ -1223,37 +1237,69 @@
   }
 
   function armarPDF() {
-    if (!ultimo || !ultimo.buenas.length) { toast(porQueNoHayPDF()); return null; }
+    if (!ultimo || !ultimo.buenas.length) { reportar(porQueNoHayPDF(), "mal"); return null; }
     var salida = generarPDF(ultimo);   // ya avisa si jsPDF no cargó
     return salida;
   }
 
   function descargarPDF() {
-    var salida = armarPDF();
+    var salida;
+    try {
+      salida = armarPDF();
+    } catch (e) {
+      reportar("El PDF no se pudo armar: " + (e && e.message ? e.message : e), "mal");
+      return;
+    }
     if (!salida) return;
+
     var nombre = nombrePDF(ultimo);
+    reportar("");
     toast("Preparando la descarga…");
+
     pedir("downloads").then(function (d) {
       downloads = d;
-      if (!d) { sinDescarga("Esta vista no tiene descargas."); return; }
-      // El ArrayBuffer se transfiere y queda inservible: se genera uno por intento.
-      return d.save({ filename:nombre, data:salida.doc.output("arraybuffer") })
-        .then(function () { toast("PDF descargado: " + nombre); })
+      if (!d) { sinDescarga("Esta vista no tiene permiso para descargar archivos."); return; }
+
+      // El ArrayBuffer se transfiere y queda inservible: uno nuevo por intento.
+      var guardado = d.save({ filename:nombre, data:salida.doc.output("arraybuffer") });
+
+      // Si el visor abre su confirmación donde no se ve, la promesa no se
+      // resuelve nunca y la página se queda callada. Por eso el plazo.
+      var aTiempo = new Promise(function (_, rechazar) {
+        setTimeout(function () { rechazar({ code:"sin_respuesta" }); }, ESPERA_DESCARGA);
+      });
+
+      return Promise.race([guardado, aTiempo])
+        .then(function () {
+          reportar("");
+          toast("PDF descargado: " + nombre);
+        })
         .catch(function (e) {
           var codigo = (e && e.code) || "unavailable";
           if (codigo === "declined" || codigo === "rate_limited") {
             toast(MOTIVOS_DESCARGA[codigo]);
+            reportar(MOTIVOS_DESCARGA[codigo]);
             return;
           }
-          sinDescarga(MOTIVOS_DESCARGA[codigo] || ("No se pudo descargar (" + codigo + ")."));
+          if (codigo === "sin_respuesta") {
+            sinDescarga("El visor no respondió a la descarga. Te abrí la cotización acá: " +
+                        "guárdala o imprímela desde el visor del navegador. Si la abres en " +
+                        "claude.ai directamente, el botón de descargar sí funciona.");
+            return;
+          }
+          sinDescarga(MOTIVOS_DESCARGA[codigo] ||
+                      ("No se pudo descargar (" + codigo + "): " +
+                       ((e && e.message) || "sin detalle") + "."));
         });
+    }).catch(function (e) {
+      reportar("No se pudo pedir la descarga: " + ((e && e.message) || e), "mal");
     });
   }
 
   // Cuando la descarga no está disponible, el PDF se muestra dentro de la página:
   // desde el visor del navegador se puede guardar o imprimir.
   function sinDescarga(mensaje) {
-    toast(mensaje);
+    reportar(mensaje, "mal");
     verPDF();
   }
 
