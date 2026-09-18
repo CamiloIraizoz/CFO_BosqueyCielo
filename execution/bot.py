@@ -679,10 +679,10 @@ pocillo: si el usuario te lo dice, pásalo en esa línea en vez de cambiar el pa
 general. El parámetro general es el valor típico; el de la línea es la excepción.
 
 LA PÁGINA: Camilo y Daniela también cotizan desde https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j
-(Taller Amphora). Usa la misma fórmula, así que los precios deben coincidir. Si alguien
+(la página de Bosque y Cielo). Usa la misma fórmula, así que los precios deben coincidir. Si alguien
 pregunta por "la página" o "el cotizador visual", es esa.
 
-PEGADO DESDE LA PÁGINA: si el mensaje empieza con "COTIZACIÓN AMPHORA", es una cotización
+PEGADO DESDE LA PÁGINA: si el mensaje empieza con "COTIZACIÓN BOSQUE Y CIELO", es una cotización
 armada allá que Camilo quiere en el Cotizador Interno. La página guarda en su propia base,
 no en el Sheet: escribirla es tu trabajo. Lee las referencias con sus datos (cantidad,
 tamaño, acabado, minutos_acabado y los costos que traiga cada una), pásalas tal cual como

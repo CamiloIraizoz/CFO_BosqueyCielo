@@ -16,8 +16,8 @@ python3 execution/cotizador.py --cantidad 6 --tamano L --dificultad facil --minu
 Desde Telegram: tool `calcular_precio(...)` en `execution/bot.py`. Primero se calcula el
 precio, después se envía la cotización con `enviar_cotizacion`.
 
-Desde el navegador: **Taller Amphora**, https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j
-(`web/taller-amphora.html` en el repo). Repite la misma cadena en JavaScript, así que
+Desde el navegador: **Bosque y Cielo**, https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j
+(`web/bosque-y-cielo.html` en el repo). Repite la misma cadena en JavaScript, así que
 **cualquier cambio de fórmula hay que hacerlo en los dos lados** o el bot y la página
 darán precios distintos.
 

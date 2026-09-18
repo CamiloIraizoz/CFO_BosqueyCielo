@@ -12,7 +12,7 @@ lo que falta está abajo con lo que hace falta para cerrarlo.
 - **Motor de cotización** (`execution/cotizador.py`) — ver `Directivas/cotizador.md`.
 - **Análisis de competencia** (`execution/competencia.py`) — ver
   `Directivas/analisis_competencia.md`.
-- **Página Taller Amphora** (`web/taller-amphora.html`) — escrita y probada, **sin publicar**.
+- **Página Bosque y Cielo** (`web/bosque-y-cielo.html`) — cotizador y producción.
 
 ## Lo que falta
 

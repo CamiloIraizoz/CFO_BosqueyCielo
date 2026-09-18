@@ -1,0 +1,87 @@
+Fecha,Descripción Extracto,Monto,Tipo,Categoría,Línea / Proyecto,De quién / A quién,Estado,Notas
+01/06/2026,PAGO INTERBANC JUAN FERNANDO,300000,Ingreso,,,Juan Fernando,ACLARAR,¿Qué línea? ¿Studio / Lab / B2B?
+01/06/2026,ABONO INTERESES AHORROS,4.60,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+01/06/2026,IMPTO GOBIERNO 4X1000,-95.77,Egreso,Gastos Financieros,—,DIAN,OK,
+01/06/2026,COMPRA INTL GOOGLE Workspace,-23944.75,Egreso,Servicios Admin,Admin,Google,OK,
+02/06/2026,ABONO INTERESES AHORROS,8.04,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+02/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,865000,Ingreso,,,, ACLARAR,¿De quién? ¿Qué línea?
+02/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,1651000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+03/06/2026,ABONO INTERESES AHORROS,7.28,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+03/06/2026,IMPTO GOBIERNO 4X1000,-2226.81,Egreso,Gastos Financieros,—,DIAN,OK,
+03/06/2026,COMPRA EN LA 13 CIUD,-457304,Egreso,,,La 13,ACLARAR,¿Materia prima / empaques / costos indirectos?
+03/06/2026,COMPRA EN HOMECENTER,-99400,Egreso,,,Homecenter,ACLARAR,¿Materia prima o costos indirectos?
+04/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-180000,Egreso,,,,ACLARAR,¿A quién? ¿Mano de obra / proveedor?
+04/06/2026,IMPTO GOBIERNO 4X1000,-720,Egreso,Gastos Financieros,—,DIAN,OK,
+04/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,150000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+04/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,540000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+07/06/2026,ABONO INTERESES AHORROS,31.92,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+08/06/2026,ABONO INTERESES AHORROS,8.66,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+08/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,500000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+09/06/2026,PAGO INTERBANC Bold.Co S.A.S,472250,Ingreso,Comisiones Pasarela,,Bold.Co (datáfono),OK,Ventas con datáfono — ¿qué línea de negocio?
+09/06/2026,ABONO INTERESES AHORROS,10.18,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+09/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,166250,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+09/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,468000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+10/06/2026,PAGO INTERBANC Adriana Arroya,500000,Ingreso,,,Adriana Arroya,ACLARAR,¿Qué línea? ¿Studio / Lab / Personalización?
+10/06/2026,ABONO INTERESES AHORROS,10.59,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+10/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-440000,Egreso,,,,ACLARAR,¿A quién? ¿Mano de obra / proveedor?
+10/06/2026,IMPTO GOBIERNO 4X1000,-3746.40,Egreso,Gastos Financieros,—,DIAN,OK,
+10/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,500000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+10/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,120000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+10/06/2026,PAGO PSE APORTES EN LINEA,-496600,Egreso,Mano de Obra,Admin,Aportes en Línea,OK,Seguridad social empleadas
+10/06/2026,TRANSFERENCIA DESDE NEQUI,120000,Ingreso,,,Nequi,ACLARAR,Venta Nequi — ¿qué línea?
+11/06/2026,C MANEJO TARJ DEB 4511 06 26,-14900,Egreso,Servicios Admin,Admin,Bancolombia,OK,Cuota manejo tarjeta débito
+11/06/2026,ABONO INTERESES AHORROS,11.30,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+11/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-170000,Egreso,,,,ACLARAR,¿A quién? ¿Mano de obra / proveedor?
+11/06/2026,IMPTO GOBIERNO 4X1000,-1213.60,Egreso,Gastos Financieros,—,DIAN,OK,
+11/06/2026,PAGO LLAVE Plenti SAS,828000,Ingreso,,,Plenti SAS,ACLARAR,Ventas Plenti — ¿qué línea?
+11/06/2026,COMPRA EN DOLLARCITY,-118500,Egreso,,,Dollarcity,ACLARAR,¿Empaques / costos indirectos?
+12/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,918000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+15/06/2026,ABONO INTERESES AHORROS,50.24,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+16/06/2026,PAGO INTERBANC PADOVA SAS,3547273,Ingreso,B2B,Proyecto Padova,Padova SAS,OK,Pago proyecto Padova
+16/06/2026,ABONO INTERESES AHORROS,20.89,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+16/06/2026,IMPTO GOBIERNO 4X1000,-279.60,Egreso,Gastos Financieros,—,DIAN,OK,
+16/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,1200000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+16/06/2026,COMPRA EN SOLUCIONES,-69900,Egreso,,,Soluciones,ACLARAR,¿Qué se compró? ¿Materia prima / admin?
+16/06/2026,TRANSFERENCIA DESDE NEQUI,1400000,Ingreso,,,Nequi,ACLARAR,Venta Nequi — ¿qué línea?
+17/06/2026,ABONO INTERESES AHORROS,21.06,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+17/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-571200,Egreso,,,,ACLARAR,¿A quién? ¿Mano de obra / arriendo?
+17/06/2026,IMPTO GOBIERNO 4X1000,-2284.80,Egreso,Gastos Financieros,—,DIAN,OK,
+17/06/2026,PAGO LLAVE KATHERINE,700000,Ingreso,,,Katherine,ACLARAR,¿Qué línea? ¿Studio / Lab / Ceramikids?
+18/06/2026,ABONO INTERESES AHORROS,17.70,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+18/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-1300000,Egreso,,,,ACLARAR,¿A quién? ¿Mano de obra / arriendo?
+18/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-193803,Egreso,,,,ACLARAR,¿A quién? ¿Proveedor fijo?
+18/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-800000,Egreso,,,,ACLARAR,¿A quién? ¿Mano de obra?
+18/06/2026,IMPTO GOBIERNO 4X1000,-9766.30,Egreso,Gastos Financieros,—,DIAN,OK,
+18/06/2026,PAGO PSE HDI COMPANIA DE INV,-147773,Egreso,Servicios Admin,Admin,HDI Seguros,OK,Póliza de seguros
+19/06/2026,ABONO INTERESES AHORROS,22.61,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+19/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,918000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+19/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,1343000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+19/06/2026,PAGO DE PROV CCA ALIANZA FID,1321634.25,Ingreso,,,CCA Alianza Fiduciaria,ACLARAR,¿Es recaudo de ventas? ¿Qué línea?
+20/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-2036000,Egreso,,,,ACLARAR,¿A quién? ¿Arriendo / nómina / proveedor?
+20/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-1360000,Egreso,,,,ACLARAR,¿A quién?
+20/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-5000000,Egreso,,,,ACLARAR,⚠️ GRANDE — ¿A quién? ¿Nómina / proveedor / inversión?
+20/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-50000,Egreso,,,,ACLARAR,¿A quién?
+20/06/2026,IMPTO GOBIERNO 4X1000,-34131.47,Egreso,Gastos Financieros,—,DIAN,OK,
+20/06/2026,COMPRA INTL Shopify 54729068,-86868.79,Egreso,Fee Shopify,Ecommerce,Shopify,OK,Suscripción mensual Shopify
+21/06/2026,ABONO INTERESES AHORROS,21.74,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+22/06/2026,ABONO INTERESES AHORROS,5.73,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+22/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-953586,Egreso,,,,ACLARAR,¿A quién? ¿Proveedor / nómina?
+22/06/2026,IMPTO GOBIERNO 4X1000,-14962.75,Egreso,Gastos Financieros,—,DIAN,OK,
+22/06/2026,COMPRA EN COMCEL PAG,-87102,Egreso,Servicios Admin,Admin,Claro/Comcel,OK,Plan celular empresa
+22/06/2026,RETIRO CAJERO CARULLA CIUDAD,-2700000,Egreso,,,Efectivo,ACLARAR,¿Para qué fue el efectivo? ¿Pagos mano de obra?
+23/06/2026,ABONO INTERESES AHORROS,5.70,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+23/06/2026,IMPTO GOBIERNO 4X1000,-82.42,Egreso,Gastos Financieros,—,DIAN,OK,
+23/06/2026,COMPRA INTL FACEBK L3E43UMQF,-20607.14,Egreso,Redes Sociales,Venta,Meta / Facebook,OK,Pauta publicitaria Facebook/Instagram
+24/06/2026,ABONO INTERESES AHORROS,5.60,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+24/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,-76000,Egreso,,,,ACLARAR,¿A quién?
+24/06/2026,IMPTO GOBIERNO 4X1000,-304,Egreso,Gastos Financieros,—,DIAN,OK,
+25/06/2026,TRANSFERENCIA CTA SUC VIRTUAL,540000,Ingreso,,,,ACLARAR,¿De quién? ¿Qué línea?
+29/06/2026,ABONO INTERESES AHORROS,31.70,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+30/06/2026,PAGO INTERBANC JUAN FERNANDO,500000,Ingreso,,,Juan Fernando,ACLARAR,¿Qué línea? ¿Studio / Lab / B2B?
+30/06/2026,ABONO INTERESES AHORROS,7.25,Ingreso,Ingresos Financieros,—,Bancolombia,OK,
+30/06/2026,PAGO DE PROV WOMPI S.A.S.,165000.92,Ingreso,,,Wompi,ACLARAR,Recaudo Wompi — ¿qué líneas incluye?
+,,,,,,,,
+TOTALES,,,,,,,,
+Total Ingresos,19733710.96,,,,,,,
+Total Egresos,-17523302.60,,,,,,,
+Movimiento Neto,2210408.36,,,,,,,
