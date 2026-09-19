@@ -136,15 +136,23 @@ TIEMPOS_ACABADO = {   # esmalte color + esmalte transparente, letras y reverso
 _VACIA = {t: {"facil": None, "medio": None, "dificil": None}
           for t in ["XS", "S", "M", "L", "XL"]}
 
-# Pulir y limpiar el bizcocho antes de esmaltar. Sin medir.
-TIEMPOS_PREPARACION = {t: dict(d) for t, d in _VACIA.items()}
-# Sellos y firmas, cargue del horno de esmalte, pulido final y empaque. Sin medir.
+# Transformar la arcilla en la forma del producto. Solo aplica cuando la pieza NO
+# se compra en bizcocho: de 36 productos analizados en el Discovery, uno solo
+# llevaba modelado. Sin medir.
+TIEMPOS_MODELADO = {t: dict(d) for t, d in _VACIA.items()}
+# Revisión final, ajustes menores, limpieza y empaque. Sin medir.
 TIEMPOS_TERMINADO = {t: dict(d) for t, d in _VACIA.items()}
 
+# Los cuatro procesos del Discovery. La Quema no va acá porque no es tiempo por
+# pieza sino por hornada: vive en HORNO.
 ETAPAS_TIEMPO = {
-    "Preparación del bizcocho": TIEMPOS_PREPARACION,
-    "Acabado":                  TIEMPOS_ACABADO,
-    "Terminado y empaque":      TIEMPOS_TERMINADO,
+    "Modelado":                     TIEMPOS_MODELADO,
+    "Acabado":                      TIEMPOS_ACABADO,
+    "Terminado, calidad y empaque": TIEMPOS_TERMINADO,
+}
+ETAPAS_RENOMBRADAS = {          # para leer hojas y bases viejas
+    "Preparación del bizcocho": None,            # se disolvió dentro de Acabado
+    "Terminado y empaque": "Terminado, calidad y empaque",
 }
 PESTANA_TIEMPOS = "Tiempos Estándar"
 
@@ -170,6 +178,45 @@ def grado_acabado(pct_pintado: float, num_tintas: int, solo_relieve: bool = Fals
         puntos -= 1
 
     return "facil" if puntos <= 1 else ("medio" if puntos <= 3 else "dificil")
+
+
+def grado_modelado(pct_relieve: float, apliques: int, tecnica: int = 0) -> str:
+    """Dificultad del MODELADO, según el Discovery (sección Estándares).
+
+    Tres dimensiones, cada una de 0 a 2 puntos (el grado del Discovery menos uno):
+      · Relieve:  0-12,5% = 0 · 12,6-25% = 1 · 25,1-60% = 2
+      · Apliques: 0-1 = 0     · 2-3 = 1      · 4+ = 2
+      · Técnica:  la define el taller; el Discovery la nombra pero no le pone escala.
+    Total: Bajo <= 2 · Medio 3-4 · Alto 5+ (por eso la escala es 0/1/2: con 1/2/3
+    el mínimo sería 3 y "Bajo: 2 o menos" no existiría).
+    """
+    puntos = 2 if pct_relieve > 25 else (1 if pct_relieve > 12.5 else 0)
+    puntos += 2 if apliques >= 4 else (1 if apliques >= 2 else 0)
+    puntos += max(0, min(2, int(tecnica or 0)))
+    return "facil" if puntos <= 2 else ("medio" if puntos <= 4 else "dificil")
+
+
+# Quema y capacidad de horno (Discovery, Frente 1). La quema no es un tiempo por
+# pieza: es una hornada con su temperatura y su enfriamiento, y el horno cabe un
+# número distinto de piezas según el tamaño. De ahí sale el tope de producción.
+HORNO_DEFECTO = {
+    "capacidad_XS": 0, "capacidad_S": 0, "capacidad_M": 0,
+    "capacidad_L": 0, "capacidad_XL": 0,
+    "quema1_horas": 0.0, "quema1_temperatura": 0, "quema1_enfriamiento_horas": 0.0,
+    "quema2_horas": 0.0, "quema2_temperatura": 0, "quema2_enfriamiento_horas": 0.0,
+}
+
+
+PARAMS_DEFECTO.update(HORNO_DEFECTO)
+
+
+def hornadas(cantidad: int, tamano: str, params: dict) -> int:
+    """Cuántas hornadas necesita ese pedido. 0 = todavía no se sabe la capacidad."""
+    cupo = float(params.get("capacidad_" + str(tamano).upper(), 0) or 0)
+    if cupo <= 0:
+        return 0
+    import math
+    return int(math.ceil(int(cantidad) / cupo))
 
 
 def _rango(pestana: str, celdas: str) -> str:
@@ -367,13 +414,16 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             minutos_acabado: float = None, params: dict = None,
             producto: str = "", tiempos: dict = None,
             ajustes: dict = None, notas: str = "",
-            cantidad_pedido: int = None, empaque_pedido: float = None) -> dict:
+            cantidad_pedido: int = None, empaque_pedido: float = None,
+            modelado: bool = False) -> dict:
     """Calcula el precio de una pieza y del pedido. Devuelve el desglose completo.
 
     `ajustes` son los datos propios de esta línea (ver AJUSTES_LINEA). `cantidad_pedido`
     es el total de piezas del pedido completo: sirve para que la advertencia de volumen
     mire el pedido entero y para repartir el empaque. `empaque_pedido` es lo que cuesta
-    empacar TODO el pedido; se divide entre esas piezas.
+    empacar TODO el pedido; se divide entre esas piezas. `modelado` = la pieza se
+    modela en el taller en vez de comprarse en bizcocho: solo entonces cuenta el
+    tiempo de esa etapa.
     """
     params = dict(params or cargar_parametros())
     ajustes = {k: v for k, v in (ajustes or {}).items()
@@ -418,6 +468,8 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     for nombre, tabla in etapas.items():
         if nombre == "Acabado":
             continue
+        if nombre == "Modelado" and not modelado:
+            continue        # la pieza se compra en bizcocho
         valor = tabla.get(tamano, {}).get(dificultad)
         if valor is None:
             sin_medir.append(nombre)
@@ -560,6 +612,8 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         "total_pedido_sin_iva": round(total_linea),
         "total_pedido_con_iva": round(total_linea * (1 + float(params["iva_pct"]) / 100.0)),
         "volumen_referencia": int(volumen),
+        "modelado": bool(modelado),
+        "hornadas": hornadas(cantidad, tamano, params),
         "advertencias": advertencias,
         "params_usados": {k: v for k, v in params.items() if not k.startswith("_")},
     }
@@ -618,7 +672,8 @@ def cotizar_pedido(lineas: list, condiciones: dict = None, params: dict = None,
                     producto=l.get("producto", ""), tiempos=tiempos,
                     ajustes=ajustes, notas=l.get("notas", ""),
                     cantidad_pedido=piezas,
-                    empaque_pedido=float(cond["empaque"] or 0) or None)
+                    empaque_pedido=float(cond["empaque"] or 0) or None,
+                    modelado=bool(l.get("modelado")))
         r["pct_pintado"] = l.get("pct_pintado")
         r["num_tintas"] = l.get("num_tintas")
         resultados.append(r)
@@ -644,8 +699,15 @@ def cotizar_pedido(lineas: list, condiciones: dict = None, params: dict = None,
     base       = subtotal + urgencia - descuento + envio + desarrollo
     iva        = base * float(params["iva_pct"]) / 100.0 if cond["cobrar_iva"] else 0.0
 
+    total_hornadas = sum(r["hornadas"] for r in resultados)
+    if total_hornadas:
+        advertencias.append(
+            f"Son {total_hornadas} hornada{'s' if total_hornadas != 1 else ''} de horno. "
+            f"Tenlo en cuenta para el plazo de entrega.")
+
     return {
         "cliente": cliente, "lineas": resultados, "piezas": piezas,
+        "hornadas": total_hornadas,
         "condiciones": cond,
         "subtotal":   round(subtotal),
         "urgencia":   round(urgencia),

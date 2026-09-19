@@ -275,6 +275,7 @@ TOOLS = [
                             "pct_pintado": {"type": "number"},
                             "num_tintas":  {"type": "integer"},
                             "solo_relieve": {"type": "boolean"},
+                            "modelado": {"type": "boolean", "description": "true si la pieza se modela en el taller en vez de comprarse en bizcocho: suma el tiempo de modelado"},
                             "minutos_acabado": {"type": "number"},
                             "costo_bizcocho": {"type": "number"},
                             "oz_esmalte_por_pieza": {"type": "number"},
@@ -328,7 +329,7 @@ TOOLS = [
     },
     {
         "name": "guardar_tiempo_estandar",
-        "description": "Guarda cuántos minutos toma una etapa de producción para un tamaño y dificultad. Etapas: 'Preparación del bizcocho' (pulir y limpiar antes de esmaltar), 'Acabado' (esmalte color y transparente), 'Terminado y empaque' (sellos, cargue del horno, pulido final, empaque). Úsalo cuando el usuario diga cuánto se demora un paso.",
+        "description": "Guarda cuántos minutos toma una etapa de producción para un tamaño y dificultad. Las etapas son las del Discovery: 'Modelado' (dar forma a la arcilla; solo si la pieza no se compra en bizcocho), 'Acabado' (decoración y esmalte) y 'Terminado, calidad y empaque' (revisión final, limpieza y empaque). Úsalo cuando el usuario diga cuánto se demora un paso.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -718,10 +719,12 @@ responder que un valor en pesos, y el galón de 128 oz a $260.000 da $2.031 la o
 
 TIEMPOS POR ETAPA: el tiempo de una pieza se arma sumando tres etapas, cada una por
 tamaño y dificultad (como las tablas del Discovery):
-  · "Preparación del bizcocho" — pulir y limpiar antes de esmaltar
-  · "Acabado" — esmalte color y transparente (ESTA ya está medida)
-  · "Terminado y empaque" — sellos, cargue del horno, pulido final, empaque
-El MODELADO no existe en el cotizador: el taller compra el bizcocho ya hecho.
+  · "Modelado" — dar forma a la arcilla. Solo cuenta cuando la pieza NO se compra en
+    bizcocho: pásalo con modelado=true en esa línea. De 36 productos que miró el
+    Discovery, uno solo llevaba modelado.
+  · "Acabado" — decoración y esmalte (ESTA ya está medida)
+  · "Terminado, calidad y empaque" — revisión final, ajustes, limpieza y empaque
+La QUEMA no es un tiempo por pieza sino una hornada: vive en la capacidad del horno.
 Cuando una etapa salga como "sin medir", pregunta por ella nombrando el tamaño
 ("¿cuántos minutos toma pulir y limpiar un bizcocho mediano?") y guarda la respuesta con
 guardar_tiempo_estandar. Cada tamaño y dificultad se pregunta una sola vez. Pregunta de a un dato por

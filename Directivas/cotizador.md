@@ -60,6 +60,24 @@ una sola vez en `condiciones.empaque` y el motor lo divide entre las piezas del 
 así que entra al costo unitario y lleva margen como cualquier otro costo. No se pregunta
 por pieza ni se guarda como parámetro del taller: depende del pedido.
 
+## Los procesos, como los definió el Discovery
+Cuatro procesos, y solo tres son tiempo por pieza:
+
+| Proceso | Cómo se mide | Estado |
+|---|---|---|
+| **Modelado** | minutos por tamaño y dificultad | sin medir · solo aplica si la pieza NO se compra en bizcocho |
+| **Acabado** | minutos por tamaño y dificultad | medido (tabla del Discovery) |
+| **Quema** | por hornada: horas, temperatura y enfriamiento | sin medir |
+| **Terminado, calidad y empaque** | minutos por tamaño y dificultad | sin medir |
+
+La **capacidad del horno** (piezas por hornada, por tamaño) es aparte y es la regla de
+oro del taller: de ahí salen el tope de producción y el plazo de entrega. El cotizador ya
+avisa cuántas hornadas son cuando está cargada.
+
+**Dificultad del modelado** (`grado_modelado`): relieve 0-12,5%/12,6-25%/25,1-60%,
+apliques 0-1/2-3/4+, y técnica (la define el taller). Cada dimensión de 0 a 2 puntos.
+Bajo ≤ 2 · Medio 3-4 · Alto 5+.
+
 ## Lo que NO se costea: las experiencias
 Bosque y Cielo cotiza **dos cosas**: productos y **experiencias (Pottery Lab)**. El motor
 de este documento es solo para productos.

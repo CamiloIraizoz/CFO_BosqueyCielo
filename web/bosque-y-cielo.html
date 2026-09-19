@@ -517,6 +517,12 @@
     </div>
 
     <div class="panel">
+      <h2>Quema y capacidad del horno</h2>
+      <p class="pista">Las tablas del Discovery que faltan por llenar. La capacidad es la regla de oro: marca cuántas piezas caben por hornada y de ahí sale el tope de producción y el plazo de entrega.</p>
+      <div id="tabla-horno"></div>
+    </div>
+
+    <div class="panel">
       <div class="acciones" style="margin-top:0;">
         <button class="btn" id="b-guardar-ajustes">Guardar ajustes</button>
         <button class="btn sec" id="b-plantilla">Plantilla para cronometrar</button>
@@ -585,8 +591,10 @@
   ];
 
   // Minutos por pieza. Solo el acabado está medido (Discovery 2026-09).
+  // Los procesos del Discovery. La Quema no está acá porque no es tiempo por
+  // pieza sino por hornada: vive en HORNO.
   var TIEMPOS = {
-    "Preparación del bizcocho": { XS:{}, S:{}, M:{}, L:{}, XL:{} },
+    "Modelado": { XS:{}, S:{}, M:{}, L:{}, XL:{} },
     "Acabado": {
       XS:{facil:4.0, medio:10.0, dificil:20.0},
       S: {facil:6.5, medio:12.6, dificil:23.0},
@@ -594,12 +602,24 @@
       L: {medio:18.3, dificil:26.2},
       XL:{medio:26.0}
     },
-    "Terminado y empaque": { XS:{}, S:{}, M:{}, L:{}, XL:{} }
+    "Terminado, calidad y empaque": { XS:{}, S:{}, M:{}, L:{}, XL:{} }
   };
   var PISTA_ETAPA = {
-    "Preparación del bizcocho": "Pulir y limpiar la pieza antes de esmaltar.",
-    "Acabado": "Esmalte de color, transparente, letras y reverso.",
-    "Terminado y empaque": "Sellos y firmas, cargue del horno, pulido final y empaque."
+    "Modelado": "Dar forma a la arcilla. Solo cuando la pieza no se compra en bizcocho.",
+    "Acabado": "Decoración, esmalte de color, transparente, letras y reverso.",
+    "Terminado, calidad y empaque": "Revisión final, ajustes menores, limpieza y empaque."
+  };
+  // Las bases viejas guardaron otros nombres.
+  var ETAPAS_VIEJAS = { "Terminado y empaque": "Terminado, calidad y empaque" };
+
+  // Quema y horno (Discovery, Frente 1): la quema es una hornada con su
+  // temperatura y su enfriamiento, y el horno cabe distinto según el tamaño.
+  var HORNO = {
+    capacidad: { XS:0, S:0, M:0, L:0, XL:0 },
+    quemas: [
+      { nombre:"Quema 1 (bizcocho)", horas:0, temperatura:0, enfriamiento:0 },
+      { nombre:"Quema 2 (esmalte)",  horas:0, temperatura:0, enfriamiento:0 }
+    ]
   };
 
   var TAMANOS = [
@@ -694,7 +714,11 @@
       // Vacío = usar el parámetro general. Se llenan solo cuando esta
       // referencia se sale de lo normal (un plato lleva más que un pocillo).
       bizcocho: "", onzas: "", vinilo: "",
-      minutos_acabado: "", minutos_extra: "", descuento: "", notas: ""
+      minutos_acabado: "", minutos_extra: "", descuento: "", notas: "",
+      // Modelado: solo cuando la pieza no se compra en bizcocho.
+      // pct_relieve es del MODELADO; `relieve` (booleano, arriba) es el
+      // "solo relieve" del acabado. Dos cosas distintas, no mezclar.
+      modelado: false, pct_relieve: 10, apliques: 1, tecnica: 0
     };
     if (base) {
       Object.keys(i).forEach(function (k) { if (k !== "id" && k in base) i[k] = base[k]; });
@@ -722,6 +746,20 @@
     return p <= 1 ? "facil" : (p <= 3 ? "medio" : "dificil");
   }
 
+  // Dificultad del MODELADO (Discovery): relieve, apliques y técnica, cada uno
+  // de 0 a 2 puntos. Bajo <= 2 · Medio 3-4 · Alto 5+.
+  function gradoModelado(pctRelieve, apliques, tecnica) {
+    var p = pctRelieve > 25 ? 2 : (pctRelieve > 12.5 ? 1 : 0);
+    p += apliques >= 4 ? 2 : (apliques >= 2 ? 1 : 0);
+    p += Math.max(0, Math.min(2, Number(tecnica) || 0));
+    return p <= 2 ? "facil" : (p <= 4 ? "medio" : "dificil");
+  }
+
+  function hornadasDe(cantidad, tamano) {
+    var cupo = Number(HORNO.capacidad[tamano]) || 0;
+    return cupo > 0 ? Math.ceil(cantidad / cupo) : 0;
+  }
+
   // Un ajuste de la referencia manda sobre el parámetro general; vacío = el general.
   function conAjuste(valorItem, valorGeneral) {
     return limpio(valorItem) === "" ? Number(valorGeneral) || 0 : numero(valorItem, 0);
@@ -745,7 +783,12 @@
     }
 
     var porEtapa = { "Acabado": minAcabado }, sinMedir = [];
-    ["Preparación del bizcocho", "Terminado y empaque"].forEach(function (etapa) {
+    var gradoMod = gradoModelado(numero(it.pct_relieve, 0), numero(it.apliques, 0), it.tecnica);
+    if (it.modelado) {
+      var vm = (TIEMPOS["Modelado"][it.tamano] || {})[gradoMod];
+      if (vm == null) sinMedir.push("modelado"); else porEtapa["Modelado"] = vm;
+    }
+    ["Terminado, calidad y empaque"].forEach(function (etapa) {
       var v = (TIEMPOS[etapa][it.tamano] || {})[dificultad];
       if (v == null) sinMedir.push(etapa.toLowerCase()); else porEtapa[etapa] = v;
     });
@@ -809,6 +852,8 @@
     return {
       id:it.id, producto:limpio(it.producto), cantidad:cantidad, tamano:it.tamano,
       dificultad:dificultad, estandar:estandar,
+      modelado: !!it.modelado, gradoModelado:gradoMod,
+      hornadas: hornadasDe(cantidad, it.tamano),
       minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa,
       valorHora:valorHora, notas:limpio(it.notas),
       // Agrupados como los pide contabilidad: materia prima, mano de obra e
@@ -855,9 +900,9 @@
     var repetidos = avisos.filter(function (a) { return a.texto.indexOf("Sin medir:") === 0; });
     if (repetidos.length > 1) {
       avisos = avisos.filter(function (a) { return a.texto.indexOf("Sin medir:") !== 0; });
-      avisos.unshift({ texto:"Sin medir: preparación del bizcocho y terminado y empaque, en " +
-                             "varias referencias. Solo se está cobrando el acabado, así que el " +
-                             "tiempo real por pieza es mayor." });
+      avisos.unshift({ texto:"Faltan tiempos medidos en varias referencias. Solo se está " +
+                             "cobrando lo que sí está medido, así que el tiempo real por pieza " +
+                             "es mayor." });
     }
 
     var volumen = Number(PARAMS.volumen_referencia) || 1;
@@ -865,6 +910,12 @@
       avisos.push({ texto:"El pedido (" + piezas + " piezas) es chico frente a las " + volumen +
                     " piezas al mes entre las que se reparten los fijos. Este precio solo se " +
                     "sostiene si el mes se llena con otros pedidos." });
+    }
+
+    var totalHornadas = buenas.reduce(function (s, l) { return s + l.hornadas; }, 0);
+    if (totalHornadas) {
+      avisos.push({ texto:"Son " + totalHornadas + (totalHornadas === 1 ? " hornada" : " hornadas") +
+                    " de horno. Tenlo en cuenta para el plazo de entrega." });
     }
 
     var subtotal = buenas.reduce(function (s, l) { return s + l.total; }, 0);
@@ -879,7 +930,7 @@
     return {
       numero:limpio(c.numero) || nuevoNumero(), cliente:limpio(c.cliente),
       contacto:limpio(c.contacto), notas:limpio(c.notas), cond:c.cond,
-      lineas:lineas, buenas:buenas, piezas:piezas,
+      lineas:lineas, buenas:buenas, piezas:piezas, hornadas:totalHornadas,
       subtotal:subtotal, urgencia:urgencia, descuento:descuento, envio:envio,
       desarrollo:desarrollo, base:base, iva:iva, total:total,
       anticipo: total * numero(c.cond.anticipo, 0) / 100,
@@ -1013,6 +1064,45 @@
     deco.appendChild(dos);
     card.appendChild(deco);
 
+    // ── Modelado: solo si la pieza no se compra en bizcocho
+    var lMod = document.createElement("label");
+    lMod.className = "check"; lMod.setAttribute("for", "mo-" + it.id);
+    lMod.style.marginBottom = "0";
+    var mod = entrada("checkbox", "", { id:"mo-" + it.id }); mod.checked = !!it.modelado;
+    var sMod = document.createElement("span");
+    sMod.textContent = "La modelamos nosotros (no llega en bizcocho)";
+    lMod.appendChild(mod); lMod.appendChild(sMod);
+    card.appendChild(lMod);
+
+    var cajaMod = document.createElement("div");
+    cajaMod.className = "rejilla";
+    cajaMod.hidden = !it.modelado;
+    var relieve = entrada("number", it.pct_relieve, { min:"0", max:"100", step:"5", id:"re-" + it.id });
+    var apliques = entrada("number", it.apliques, { min:"0", max:"20", step:"1", id:"ap2-" + it.id });
+    var tecnica = document.createElement("select");
+    tecnica.id = "te-" + it.id;
+    [["0","Sencilla"], ["1","Media"], ["2","Compleja"]].forEach(function (par) {
+      var o = document.createElement("option"); o.value = par[0]; o.textContent = par[1];
+      if (String(it.tecnica) === par[0]) o.selected = true;
+      tecnica.appendChild(o);
+    });
+    cajaMod.appendChild(campo("% de relieve", relieve, "0-12,5 bajo · 12,6-25 medio · 25+ alto"));
+    cajaMod.appendChild(campo("Apliques", apliques, "0-1 bajo · 2-3 medio · 4+ alto"));
+    cajaMod.appendChild(campo("Técnica de modelado", tecnica));
+    card.appendChild(cajaMod);
+    it._cajaMod = cajaMod;
+
+    mod.addEventListener("change", function () {
+      it.modelado = mod.checked;
+      cajaMod.hidden = !mod.checked;
+      recalcular(); guardarBorrador();
+    });
+    [[relieve,"pct_relieve"], [apliques,"apliques"], [tecnica,"tecnica"]].forEach(function (par) {
+      function leer() { it[par[1]] = par[0].value; recalcular(); guardarBorrador(); }
+      par[0].addEventListener("input", leer);
+      par[0].addEventListener("change", leer);
+    });
+
     // De dónde sale la dificultad y cuántos minutos se están cobrando. Sin esto
     // parece que mover la superficie pintada no hace nada: cambia por tramos.
     var regla = document.createElement("div"); regla.className = "regla";
@@ -1082,6 +1172,7 @@
       var l = r.lineas.filter(function (x) { return x.id === it.id; })[0];
       if (!l) return;
       it._pintadoVal.textContent = Math.round(numero(it.pintado, 0)) + "%";
+      if (it._cajaMod) it._cajaMod.hidden = !it.modelado;
       it._grado.textContent = "Acabado " + NOMBRE_DIF[l.dificultad] +
         (l.error ? "" : " · " + l.minutos + " min");
       var ph = it._placeholders;
@@ -1142,6 +1233,18 @@
       " → <b>" + puntos + " puntos</b>, acabado " + NOMBRE_DIF[l.dificultad] +
       ". (0-1 fácil · 2-3 medio · 4+ difícil)";
     caja.appendChild(texto);
+
+    if (it.modelado) {
+      var mod = document.createElement("div");
+      mod.style.marginTop = "4px";
+      var r = numero(it.pct_relieve, 0), ap = numero(it.apliques, 0), te = Number(it.tecnica) || 0;
+      var pr = r > 25 ? 2 : (r > 12.5 ? 1 : 0), pa = ap >= 4 ? 2 : (ap >= 2 ? 1 : 0);
+      mod.innerHTML = "Modelado: relieve " + Math.round(r) + "% = <b>" + pr + "</b> · " +
+        ap + (ap === 1 ? " aplique = <b>" : " apliques = <b>") + pa + "</b> · técnica = <b>" +
+        te + "</b> → <b>" + (pr + pa + te) + " puntos</b>, modelado " +
+        NOMBRE_DIF[l.gradoModelado] + ". (0-2 fácil · 3-4 medio · 5+ difícil)";
+      caja.appendChild(mod);
+    }
 
     var aMano = limpio(it.minutos_acabado) !== "";
     var pie = document.createElement("div");
@@ -1668,11 +1771,78 @@
       tabla.appendChild(tbody); g.appendChild(tabla); cont.appendChild(g);
     });
 
+    pintarHorno();
+
     $("b-guardar-ajustes").disabled = puedeEscribir === false;
     if (puedeEscribir === false) {
       $("ajustes-lectura").innerHTML = '<div class="aviso-solo-lectura">Estás viendo los ajustes en ' +
         'modo lectura: para cambiarlos necesitas permiso de edición en esta página.</div>';
     }
+  }
+
+  var refsHorno = {};
+
+  function pintarHorno() {
+    var cont = $("tabla-horno");
+    cont.textContent = ""; refsHorno = {};
+
+    // Capacidad por tamaño
+    var g1 = document.createElement("div"); g1.className = "grupo-tiempos";
+    var h1 = document.createElement("h3"); h1.textContent = "Capacidad del horno";
+    var p1 = document.createElement("p");
+    p1.textContent = "Cuántas piezas de cada tamaño caben en una hornada.";
+    g1.appendChild(h1); g1.appendChild(p1);
+    var rej = document.createElement("div"); rej.className = "rejilla";
+    TAMANOS.forEach(function (t) {
+      var e = entrada("number", HORNO.capacidad[t.id] || "", { min:"0", step:"1",
+                                                               id:"hc-" + t.id, placeholder:"—" });
+      e.disabled = puedeEscribir === false;
+      e.addEventListener("input", marcarSucio);
+      refsHorno["capacidad|" + t.id] = e;
+      rej.appendChild(campo(t.id + " (" + t.nota + ")", e));
+    });
+    g1.appendChild(rej); cont.appendChild(g1);
+
+    // Quemas
+    var g2 = document.createElement("div"); g2.className = "grupo-tiempos";
+    var h2 = document.createElement("h3"); h2.textContent = "Las quemas";
+    var p2 = document.createElement("p");
+    p2.textContent = "El tiempo de quema parece fijo y el enfriamiento es clave para saber " +
+                     "cuándo se puede volver a cargar el horno.";
+    g2.appendChild(h2); g2.appendChild(p2);
+
+    var tabla = document.createElement("table"); tabla.className = "tabla-tiempos";
+    var thead = document.createElement("thead"), tr = document.createElement("tr");
+    ["Quema", "Horas", "Temperatura °C", "Enfriamiento (h)"].forEach(function (t) {
+      var th = document.createElement("th"); th.textContent = t; tr.appendChild(th);
+    });
+    thead.appendChild(tr); tabla.appendChild(thead);
+    var tbody = document.createElement("tbody");
+    HORNO.quemas.forEach(function (q, i) {
+      var fila = document.createElement("tr");
+      var td0 = document.createElement("td");
+      td0.textContent = q.nombre; td0.style.width = "180px";
+      fila.appendChild(td0);
+      ["horas", "temperatura", "enfriamiento"].forEach(function (clave) {
+        var td = document.createElement("td");
+        var e = entrada("number", q[clave] || "", { min:"0", step:"0.5",
+                                                    placeholder:"—", id:"hq-" + i + "-" + clave });
+        e.disabled = puedeEscribir === false;
+        e.addEventListener("input", marcarSucio);
+        refsHorno["quema|" + i + "|" + clave] = e;
+        td.appendChild(e); fila.appendChild(td);
+      });
+      tbody.appendChild(fila);
+    });
+    tabla.appendChild(tbody); g2.appendChild(tabla); cont.appendChild(g2);
+  }
+
+  function leerHorno() {
+    Object.keys(refsHorno).forEach(function (llave) {
+      var partes = llave.split("|"), v = refsHorno[llave].value;
+      if (partes[0] === "capacidad") HORNO.capacidad[partes[1]] = numero(v, 0);
+      else HORNO.quemas[Number(partes[1])][partes[2]] = numero(v, 0);
+    });
   }
 
   function guardarAjustes() {
@@ -1686,6 +1856,7 @@
       if (limpio(v) === "") delete TIEMPOS[partes[0]][partes[1]][partes[2]];
       else TIEMPOS[partes[0]][partes[1]][partes[2]] = numero(v, 0);
     });
+    leerHorno();
     recalcular();
 
     var copiaParams = {};
@@ -1700,7 +1871,8 @@
       db = d;
       return Promise.all([
         d.doc("config/parametros").set(copiaParams),
-        d.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS)))
+        d.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS))),
+        d.doc("config/horno").set(JSON.parse(JSON.stringify(HORNO)))
       ]).then(function () {
         limpiarSucio();
         reportar("Guardado. Si cambiaste un costo, cuéntaselo también al bot.",
@@ -1788,6 +1960,63 @@
         y += 26;
       });
       y += 22;
+    });
+
+    // ── Quema y capacidad del horno (Discovery, Frente 1)
+    if (y + 190 > H - 60) { doc.addPage(); y = 60; }
+    doc.setFont("times", "normal"); doc.setFontSize(13);
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+    doc.text("Quema y capacidad del horno", M, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+    doc.text("Cuántas piezas caben por hornada, y cuánto tarda cada quema con su enfriamiento.",
+             M, y + 12);
+    y += 26;
+
+    var anchoTam2 = 96, anchoCol2 = (x2 - M - anchoTam2) / 5;
+    doc.setFillColor(246, 238, 235); doc.rect(M, y, x2 - M, 20, "F");
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(7.5);
+    doc.text("CAPACIDAD", M + 8, y + 13);
+    TAMANOS.forEach(function (t, i) {
+      doc.text(t.id, M + anchoTam2 + anchoCol2 * i + 8, y + 13);
+    });
+    y += 20;
+    doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]);
+    doc.rect(M, y, x2 - M, 26);
+    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    doc.text("Piezas por hornada", M + 8, y + 17);
+    TAMANOS.forEach(function (t, i) {
+      var x = M + anchoTam2 + anchoCol2 * i;
+      doc.line(x, y, x, y + 26);
+      var v = Number(HORNO.capacidad[t.id]) || 0;
+      if (v) { doc.setTextColor(178, 165, 160); doc.text(String(v), x + 8, y + 17);
+               doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); }
+    });
+    y += 42;
+
+    var colQ = [["QUEMA", 180], ["HORAS", 110], ["TEMPERATURA °C", 110], ["ENFRIAMIENTO (H)", 110]];
+    doc.setFillColor(246, 238, 235); doc.rect(M, y, x2 - M, 20, "F");
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(7.5);
+    var xq = M;
+    colQ.forEach(function (c) { doc.text(c[0], xq + 8, y + 13); xq += c[1]; });
+    y += 20;
+    HORNO.quemas.forEach(function (q) {
+      doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]);
+      doc.rect(M, y, x2 - M, 26);
+      var xx = M;
+      colQ.forEach(function (c, i) { if (i) { doc.line(xx, y, xx, y + 26); } xx += c[1]; });
+      doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+      doc.text(q.nombre, M + 8, y + 17);
+      [q.horas, q.temperatura, q.enfriamiento].forEach(function (v, i) {
+        if (Number(v)) {
+          doc.setTextColor(178, 165, 160);
+          doc.text(String(v), M + colQ[0][1] + colQ[1][1] * i + 8, y + 17);
+          doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+        }
+      });
+      y += 26;
     });
 
     // ── Hoja 2: toma de tiempos
@@ -2910,9 +3139,23 @@
         }
       }, function () {});
 
+      d.doc("config/horno").onSnapshot(function (snap) {
+        if (snap.exists) {
+          var datos = snap.data() || {};
+          if (datos.capacidad) HORNO.capacidad = datos.capacidad;
+          if (datos.quemas && datos.quemas.length) HORNO.quemas = datos.quemas;
+          recalcular();
+          if (!$("vista-ajustes").hidden) pintarAjustes();
+        }
+      }, function () {});
+
       d.doc("config/tiempos").onSnapshot(function (snap) {
         if (snap.exists) {
           var datos = snap.data() || {};
+          // Las bases viejas traen otros nombres de etapa.
+          Object.keys(ETAPAS_VIEJAS).forEach(function (viejo) {
+            if (datos[viejo] && !datos[ETAPAS_VIEJAS[viejo]]) datos[ETAPAS_VIEJAS[viejo]] = datos[viejo];
+          });
           Object.keys(TIEMPOS).forEach(function (etapa) {
             if (datos[etapa]) TIEMPOS[etapa] = datos[etapa];
           });
