@@ -327,6 +327,78 @@ def _nota_con_adjunto(deal_id: str, contacto_id: str, texto: str, file_id=None) 
         return False
 
 
+_pipeline_cache = None
+
+
+def _pipeline_tickets():
+    """(pipeline_id, stage_id) del primer pipeline de tickets del portal.
+
+    No se codifican a mano porque son propios de cada cuenta de HubSpot: se leen
+    una vez y se guardan. La primera etapa es la de "sin empezar".
+    """
+    global _pipeline_cache
+    if _pipeline_cache is not None:
+        return _pipeline_cache
+    try:
+        r = requests.get(f"{BASE_URL}/crm/v3/pipelines/tickets",
+                         headers=_headers(), timeout=20)
+        r.raise_for_status()
+        pipelines = r.json().get("results", [])
+        if not pipelines:
+            _pipeline_cache = ("", "")
+            return _pipeline_cache
+        pipe = pipelines[0]
+        etapas = sorted(pipe.get("stages", []),
+                        key=lambda e: e.get("displayOrder", 0))
+        _pipeline_cache = (pipe.get("id", ""), etapas[0].get("id", "") if etapas else "")
+    except Exception as e:
+        print(f"[hubspot] No se pudo leer el pipeline de tickets: {e}")
+        _pipeline_cache = ("", "")
+    return _pipeline_cache
+
+
+def crear_ticket(asunto: str, descripcion: str, contacto_id: str = "",
+                 deal_id: str = "", prioridad: str = "MEDIUM") -> str:
+    """Crea el ticket de producción de una cotización y lo asocia al contacto y
+    al negocio. Devuelve el ID, o un texto que empieza con 'Error'."""
+    pipeline, etapa = _pipeline_tickets()
+    props = {"subject": asunto, "content": descripcion, "hs_ticket_priority": prioridad}
+    if pipeline:
+        props["hs_pipeline"] = pipeline
+        props["hs_pipeline_stage"] = etapa
+
+    asociaciones = []
+    # typeId de HubSpot: 16 = ticket→contacto · 28 = ticket→negocio
+    if contacto_id:
+        asociaciones.append({"to": {"id": contacto_id},
+                             "types": [{"associationCategory": "HUBSPOT_DEFINED",
+                                        "associationTypeId": 16}]})
+    if deal_id:
+        asociaciones.append({"to": {"id": deal_id},
+                             "types": [{"associationCategory": "HUBSPOT_DEFINED",
+                                        "associationTypeId": 28}]})
+
+    cuerpo = {"properties": props}
+    if asociaciones:
+        cuerpo["associations"] = asociaciones
+    try:
+        r = requests.post(f"{BASE_URL}/crm/v3/objects/tickets", json=cuerpo,
+                          headers=_headers(), timeout=20)
+        if r.status_code >= 400 and asociaciones:
+            # Si falla por las asociaciones, al menos que el ticket exista.
+            r = requests.post(f"{BASE_URL}/crm/v3/objects/tickets",
+                              json={"properties": props}, headers=_headers(), timeout=20)
+        r.raise_for_status()
+        return r.json().get("id", "")
+    except Exception as e:
+        detalle = ""
+        try:
+            detalle = f" — {r.text[:160]}"
+        except Exception:
+            pass
+        return f"Error creando el ticket: {e}{detalle}"
+
+
 def registrar_cotizacion(datos: dict, paquete: dict, deal_id: str = "") -> str:
     """Sube la cotización recién enviada a HubSpot.
 
@@ -393,7 +465,16 @@ def registrar_cotizacion(datos: dict, paquete: dict, deal_id: str = "") -> str:
                      else "<br>Sin correo del cliente: la cotización se envió solo a Daniela y Camilo."))
         nota_ok = _nota_con_adjunto(deal_id, contacto_id or "", cuerpo, file_id)
 
-        # 4. Resumen para Telegram
+        # 4. Ticket: la orden de trabajo de esta cotización (Camilo, 2026-09-19).
+        #    El negocio es la oportunidad comercial; el ticket es el trabajo que
+        #    entra a producción si el cliente acepta.
+        ticket = crear_ticket(
+            asunto=f"Producción {numero} — {empresa or nombre or 'sin cliente'}",
+            descripcion=(paquete.get("detalle", "") +
+                         f"\n\nTotal: ${total:,}".replace(",", ".")),
+            contacto_id=contacto_id or "", deal_id=deal_id)
+
+        # 5. Resumen para Telegram
         partes = [f"📊 HubSpot: negocio {deal_id}"]
         partes.append("creado en etapa cotización" if deal_nuevo else "actualizado")
         if contacto_nuevo:
@@ -404,6 +485,10 @@ def registrar_cotizacion(datos: dict, paquete: dict, deal_id: str = "") -> str:
             partes.append("nota con PDF adjunto" if file_id else "nota agregada (PDF no se pudo adjuntar)")
         else:
             partes.append("⚠️ la nota no se pudo crear")
+        if str(ticket).startswith("Error"):
+            partes.append(f"⚠️ sin ticket ({ticket})")
+        elif ticket:
+            partes.append(f"ticket {ticket} creado")
         return " · ".join(partes)
     except Exception as e:
         return f"⚠️ HubSpot: la cotización se envió pero no se registró ({e})"

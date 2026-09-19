@@ -76,7 +76,11 @@ PARAMS_DEFECTO = {
     "costo_bizcocho":         0,
     "costo_esmaltes":         0,      # o se deriva de oz_esmalte_por_pieza
     "oz_esmalte_por_pieza":   0.0,    # onzas de esmalte que lleva una pieza
-    "costo_vinilo":           0,
+    "costo_vinilo":           0,      # por pieza, cuando la pieza lleva vinilo
+    # El vinilo adhesivo se pinta por encima: gasta el mismo esmalte pero se
+    # trabaja más rápido (Camilo, 2026-09-19). Cuánto más rápido está sin medir:
+    # en 0 no descuenta nada y el precio sale por lo alto, que es lo prudente.
+    "minutos_ahorro_vinilo":  0.0,
     "costo_empaque":          0,    # por pieza: sale de repartir el empaque del pedido
     # UNA sola quema: el bizcocho se compra ya quemado, así que el taller solo
     # hace la del esmalte (Camilo, 2026-09-17). Y va en cero porque su energía ya
@@ -401,6 +405,7 @@ def guardar_parametro(clave: str, valor) -> str:
 # material era la mayor imprecisión del motor.
 AJUSTES_LINEA = [
     "costo_bizcocho", "oz_esmalte_por_pieza", "costo_esmaltes", "costo_vinilo",
+    "lleva_vinilo",                     # la pieza va con vinilo adhesivo o no
     "margen_pct",                       # sobreescriben el parámetro general
     "minutos_extra",                    # se suman al tiempo de la pieza
     "descuento_pct",                    # baja el total de esa línea
@@ -434,6 +439,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     for clave, valor in ajustes.items():
         if clave in PARAMS_DEFECTO:
             params[clave] = float(valor)
+    lleva_vinilo = bool(ajustes.pop("lleva_vinilo", False))
     minutos_extra = float(ajustes.get("minutos_extra", 0) or 0)
     descuento_pct = float(ajustes.get("descuento_pct", 0) or 0)
     piezas_pedido = int(cantidad_pedido or cantidad) or 1
@@ -486,10 +492,18 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             "Sin medir: " + ", ".join(f"{e.lower()} ({tamano}/{dificultad})" for e in sin_medir)
             + ". Solo se está cobrando el acabado, así que el tiempo real es mayor.")
 
+    # El adhesivo se pinta por encima: mismo esmalte, menos tiempo.
+    ahorro = float(params.get("minutos_ahorro_vinilo", 0) or 0) if lleva_vinilo else 0.0
+    if ahorro:
+        minutos_por_etapa["Ahorro por vinilo"] = -ahorro
+    elif lleva_vinilo:
+        advertencias.append(
+            "La pieza lleva vinilo, que se pinta más rápido, pero todavía no está medido "
+            "cuánto tiempo ahorra: se está cobrando el acabado completo.")
     if minutos_extra:
         minutos_por_etapa["Ajuste manual"] = minutos_extra
 
-    minutos_totales = sum(minutos_por_etapa.values())
+    minutos_totales = max(0.0, sum(minutos_por_etapa.values()))
 
     horas_mes   = float(params["horas_semanales"]) * float(params["semanas_mes"])
     valor_hora  = float(params["salario_mensual"]) / horas_mes if horas_mes else 0
@@ -500,8 +514,9 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     onzas = float(params.get("oz_esmalte_por_pieza", 0) or 0)
     costo_esmaltes = (onzas * precio_unitario_material("esmalte_blanco")
                       if onzas else float(params["costo_esmaltes"]))
-    materiales = (float(params["costo_bizcocho"]) + costo_esmaltes
-                  + float(params["costo_vinilo"]))
+    # El vinilo solo se cobra si la pieza lo lleva.
+    costo_vinilo = float(params["costo_vinilo"]) if lleva_vinilo else 0.0
+    materiales = float(params["costo_bizcocho"]) + costo_esmaltes + costo_vinilo
     quemas = float(params.get("costo_quema", 0) or 0)
     empaque = float(params["costo_empaque"])
 
@@ -555,7 +570,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         ("Materia prima", materiales + empaque + quemas, [
             ("Bizcocho", float(params["costo_bizcocho"])),
             ("Esmaltes", costo_esmaltes),
-            ("Vinilo o transfer", float(params["costo_vinilo"])),
+            ("Vinilo o transfer", costo_vinilo),
             ("Empaque (del pedido, por pieza)", empaque),
             ("Quema", quemas),
         ]),
@@ -607,6 +622,7 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         "bruto_linea":         round(bruto_linea),
         "total_linea":         round(total_linea),
         "minutos_extra":       round(minutos_extra, 1),
+        "lleva_vinilo":        lleva_vinilo,
         "ajustes":             ajustes,
         "notas":               notas,
         "total_pedido_sin_iva": round(total_linea),

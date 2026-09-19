@@ -592,6 +592,7 @@
     margen_modo: "markup", iva_pct: 19,
     costo_bizcocho: 4500, costo_esmaltes: 0, oz_esmalte_por_pieza: 0,
     precio_oz_esmalte: 2031.25, costo_vinilo: 0, costo_empaque: 0,
+    minutos_ahorro_vinilo: 0,
     costo_quema: 0, minutos_otros_pasos: 0
   };
 
@@ -609,7 +610,8 @@
     ["costo_bizcocho",      "Bizcocho por pieza",         "$",   "Valor típico; se puede cambiar por referencia"],
     ["precio_oz_esmalte",   "Esmalte por onza",           "$",   "Galón de 128 oz a $260.000 = $2.031/oz"],
     ["oz_esmalte_por_pieza","Onzas de esmalte por pieza", "oz",  "Valor típico; se puede cambiar por referencia"],
-    ["costo_vinilo",        "Vinilo o transfer por pieza","$",   "0 si no lleva"],
+    ["costo_vinilo",        "Vinilo por pieza",           "$",   "Solo se cobra en las piezas que lo llevan"],
+    ["minutos_ahorro_vinilo","Minutos que ahorra el vinilo","min", "El adhesivo se pinta por encima: mismo esmalte, menos tiempo"],
     ["minutos_otros_pasos", "Minutos de otros pasos",     "min", "Respaldo mientras no haya tiempos medidos"],
     ["desperdicio_pct",     "Desperdicio",                "%",   "Piezas que se pierden en el proceso"],
     ["mercadeo_pct",        "Mercadeo",                   "%",   ""],
@@ -753,7 +755,8 @@
       // Modelado: solo cuando la pieza no se compra en bizcocho.
       // pct_relieve es del MODELADO; `relieve` (booleano, arriba) es el
       // "solo relieve" del acabado. Dos cosas distintas, no mezclar.
-      modelado: false, pct_relieve: 10, apliques: 1, tecnica: 0
+      modelado: false, pct_relieve: 10, apliques: 1, tecnica: 0,
+      lleva_vinilo: false
     };
     if (base) {
       Object.keys(i).forEach(function (k) { if (k !== "id" && k in base) i[k] = base[k]; });
@@ -835,6 +838,13 @@
       avisos.push({ texto:"Sin medir: " + sinMedir.join(" y ") + ". Solo se está cobrando el " +
                           "acabado, así que el tiempo real por pieza es mayor." });
     }
+    // El adhesivo se pinta por encima: mismo esmalte, menos tiempo.
+    var ahorro = it.lleva_vinilo ? Number(P.minutos_ahorro_vinilo) || 0 : 0;
+    if (ahorro) porEtapa["Ahorro por vinilo"] = -ahorro;
+    else if (it.lleva_vinilo) {
+      avisos.push({ texto:"La pieza lleva vinilo, que se pinta más rápido, pero todavía no " +
+                          "está medido cuánto ahorra: se está cobrando el acabado completo." });
+    }
     var extra = numero(it.minutos_extra, 0);
     if (extra) porEtapa["Ajuste manual"] = extra;
     var minutos = Object.keys(porEtapa).reduce(function (s, k) { return s + porEtapa[k]; }, 0);
@@ -856,7 +866,8 @@
     var onzas = limpio(it.onzas) !== "" ? numero(it.onzas, 0)
               : porTamano(MATERIAL_TAMANO.oz_esmalte, P.oz_esmalte_por_pieza);
     var esmaltes = onzas ? onzas * Number(P.precio_oz_esmalte) : Number(P.costo_esmaltes) || 0;
-    var vinilo = conAjuste(it.vinilo, P.costo_vinilo);
+    // El vinilo solo se cobra en las piezas que lo llevan.
+    var vinilo = it.lleva_vinilo ? conAjuste(it.vinilo, P.costo_vinilo) : 0;
     // El empaque es del pedido, no de la pieza: llega ya repartido.
     var empaque = Number(empaquePorPieza) || 0;
     var materiales = bizcocho + esmaltes + vinilo;
@@ -903,7 +914,7 @@
       grupos: [
         ["Materia prima", materiales + empaque + quema, [
           ["Bizcocho", bizcocho], ["Esmaltes", esmaltes],
-          ["Vinilo o transfer", vinilo], ["Empaque (del pedido)", empaque],
+          ["Vinilo", vinilo], ["Empaque (del pedido)", empaque],
           ["Quema", quema]
         ]],
         ["Mano de obra", manoObra, [
@@ -1096,6 +1107,16 @@
     dos.style.alignItems = "center";
     var tintas = entrada("number", it.tintas, { min:"0", max:"12", step:"1", id:"t-" + it.id });
     dos.appendChild(campo("Tintas", tintas));
+    var lVin = document.createElement("label");
+    lVin.className = "check"; lVin.setAttribute("for", "vi-" + it.id);
+    lVin.style.marginBottom = "0"; lVin.style.flex = "1 1 130px";
+    var vin = entrada("checkbox", "", { id:"vi-" + it.id }); vin.checked = !!it.lleva_vinilo;
+    var sVin = document.createElement("span"); sVin.textContent = "Lleva vinilo";
+    lVin.appendChild(vin); lVin.appendChild(sVin);
+    vin.addEventListener("change", function () {
+      it.lleva_vinilo = vin.checked; recalcular(); guardarBorrador();
+    });
+
     var lRel = document.createElement("label");
     lRel.className = "check"; lRel.setAttribute("for", "r-" + it.id);
     lRel.style.marginBottom = "0"; lRel.style.flex = "1 1 130px";
@@ -1103,6 +1124,7 @@
     var sRel = document.createElement("span"); sRel.textContent = "Solo relieve";
     lRel.appendChild(rel); lRel.appendChild(sRel);
     dos.appendChild(lRel);
+    dos.appendChild(lVin);
     deco.appendChild(dos);
     card.appendChild(deco);
 
@@ -1749,6 +1771,7 @@
       ];
       if (limpio(it.bizcocho) !== "") partes.push("costo_bizcocho " + it.bizcocho);
       if (limpio(it.onzas) !== "") partes.push("oz_esmalte_por_pieza " + it.onzas);
+      if (it.lleva_vinilo) partes.push("lleva_vinilo sí");
       if (limpio(it.vinilo) !== "") partes.push("costo_vinilo " + it.vinilo);
       if (numero(it.minutos_extra, 0)) partes.push("minutos_extra " + it.minutos_extra);
       if (l.descuentoPct) partes.push("descuento_pct " + l.descuentoPct);
