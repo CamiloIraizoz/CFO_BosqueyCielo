@@ -876,7 +876,8 @@ def formato_telegram(r: dict) -> str:
     for titulo, total, detalle in r["grupos"]:
         if not total:
             continue
-        lineas.append(f"  {titulo.upper()}: {_fmt(total)}")
+        peso = round(total / r["gran_total"] * 100) if r["gran_total"] else 0
+        lineas.append(f"  {titulo.upper()}: {_fmt(total)} ({peso}%)")
         for etiqueta, valor in detalle:
             if valor and len(detalle) > 1:
                 lineas.append(f"     · {etiqueta}: {_fmt(valor)}")

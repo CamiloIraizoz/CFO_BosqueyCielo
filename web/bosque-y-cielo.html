@@ -93,6 +93,10 @@
   .seg:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 
   input[type="range"] { width:100%; accent-color:var(--accent); }
+  .regla { font-size:12px; color:var(--muted); margin-top:9px; line-height:1.5; }
+  .regla b { color:var(--ink); font-weight:500; }
+  .regla button { background:none; border:0; padding:0; cursor:pointer;
+                  color:var(--accent-deep); text-decoration:underline; font-size:12px; }
   .grado { display:inline-flex; align-items:center; gap:7px; font-size:12.5px;
            background:var(--accent-wash); color:var(--accent-deep);
            border-radius:999px; padding:4px 11px; font-weight:500; white-space:nowrap; }
@@ -1009,6 +1013,12 @@
     deco.appendChild(dos);
     card.appendChild(deco);
 
+    // De dónde sale la dificultad y cuántos minutos se están cobrando. Sin esto
+    // parece que mover la superficie pintada no hace nada: cambia por tramos.
+    var regla = document.createElement("div"); regla.className = "regla";
+    it._regla = regla;
+    card.appendChild(regla);
+
     // ── Detalle avanzado de la referencia
     var det = document.createElement("details"); det.className = "mas";
     var sum = document.createElement("summary");
@@ -1072,7 +1082,8 @@
       var l = r.lineas.filter(function (x) { return x.id === it.id; })[0];
       if (!l) return;
       it._pintadoVal.textContent = Math.round(numero(it.pintado, 0)) + "%";
-      it._grado.textContent = "Acabado " + NOMBRE_DIF[l.dificultad];
+      it._grado.textContent = "Acabado " + NOMBRE_DIF[l.dificultad] +
+        (l.error ? "" : " · " + l.minutos + " min");
       var ph = it._placeholders;
       ph.bizcocho.placeholder = String(Math.round(Number(PARAMS.costo_bizcocho) || 0));
       ph.onzas.placeholder = String(Number(PARAMS.oz_esmalte_por_pieza) || 0);
@@ -1081,19 +1092,24 @@
 
       if (l.error) {
         it._card.classList.add("mal");
+        pintarRegla(it, l);
         it._precio.textContent = "—";
         it._precioNota.textContent = "faltan los minutos";
         it._mini.textContent = "";
         return;
       }
       it._card.classList.remove("mal");
+      pintarRegla(it, l);
       it._precio.textContent = pesos(l.total);
       it._precioNota.textContent = pesos(l.pvp) + " c/u · " + l.minutos + " min" +
                                    (l.descuentoPct ? " · -" + l.descuentoPct + "%" : "");
       it._mini.textContent = "";
       l.grupos.forEach(function (g) {
         if (!g[1]) return;
-        it._mini.appendChild(miniLinea(g[0], pesos(g[1]), "grupo"));
+        // El % sobre el costo total es la columna C del Cotizador Interno:
+        // sirve para ver de un vistazo qué pesa en el precio.
+        var peso = l.granTotal ? Math.round(g[1] / l.granTotal * 100) : 0;
+        it._mini.appendChild(miniLinea(g[0] + " · " + peso + "%", pesos(g[1]), "grupo"));
         if (g[2].length > 1) {
           g[2].forEach(function (d) {
             if (d[1]) it._mini.appendChild(miniLinea(d[0], pesos(d[1]), "hijo"));
@@ -1106,6 +1122,52 @@
     });
 
     pintarResumen(r);
+  }
+
+  // Explica por qué la pieza quedó fácil/medio/difícil y qué minutos se cobran.
+  // La escala del Discovery va por tramos: mover el deslizador dentro del mismo
+  // tramo no cambia nada, y sin decirlo parece que la página está rota.
+  function pintarRegla(it, l) {
+    var caja = it._regla;
+    caja.textContent = "";
+    var pintado = numero(it.pintado, 0), tintas = numero(it.tintas, 0);
+    var pPint = pintado >= 60 ? 2 : (pintado >= 30 ? 1 : 0);
+    var pTint = tintas >= 4 ? 2 : (tintas >= 2 ? 1 : 0);
+    var puntos = pPint + pTint - (it.relieve ? 1 : 0);
+
+    var texto = document.createElement("span");
+    texto.innerHTML = "Pintado " + Math.round(pintado) + "% = <b>" + pPint + "</b> · " +
+      tintas + (tintas === 1 ? " tinta = <b>" : " tintas = <b>") + pTint + "</b>" +
+      (it.relieve ? " · solo relieve = <b>-1</b>" : "") +
+      " → <b>" + puntos + " puntos</b>, acabado " + NOMBRE_DIF[l.dificultad] +
+      ". (0-1 fácil · 2-3 medio · 4+ difícil)";
+    caja.appendChild(texto);
+
+    var aMano = limpio(it.minutos_acabado) !== "";
+    var pie = document.createElement("div");
+    pie.style.marginTop = "4px";
+    if (aMano) {
+      var aviso = document.createElement("span");
+      aviso.innerHTML = "Le pusiste <b>" + numero(it.minutos_acabado, 0) +
+        " min</b> a mano, así que la dificultad no cambia el precio" +
+        (l.estandar != null ? " (el estándar sería " + l.estandar + " min)" : "") + ". ";
+      pie.appendChild(aviso);
+      var volver = document.createElement("button");
+      volver.type = "button";
+      volver.textContent = "Usar el estándar";
+      volver.addEventListener("click", function () {
+        it.minutos_acabado = "";
+        var campo = $("ma-" + it.id);
+        if (campo) campo.value = "";
+        recalcular(); guardarBorrador();
+      });
+      pie.appendChild(volver);
+      caja.appendChild(pie);
+    } else if (l.estandar != null) {
+      pie.textContent = "Minutos de acabado: " + l.estandar + " (el estándar de " +
+        it.tamano + " / " + NOMBRE_DIF[l.dificultad] + ").";
+      caja.appendChild(pie);
+    }
   }
 
   function miniLinea(etiqueta, valor, clase) {
@@ -1540,14 +1602,33 @@
 
   // ── Ajustes ───────────────────────────────────────────────────────
   var refsParams = {}, refsTiempos = {};
+  // Ajustes se redibuja al entrar a la pestaña y cada vez que la base manda una
+  // actualización. Si eso pasa mientras alguien escribe, se le borra lo que llevaba
+  // y parece que "no guarda". Con esto no se redibuja hasta que guarde o descarte.
+  var ajustesSucios = false;
 
-  function pintarAjustes() {
+  function marcarSucio() {
+    if (ajustesSucios) return;
+    ajustesSucios = true;
+    $("b-guardar-ajustes").textContent = "Guardar ajustes ·";
+    reportar("Tienes cambios sin guardar. Dale a «Guardar ajustes» o se pierden.",
+             null, "a-reporte");
+  }
+
+  function limpiarSucio() {
+    ajustesSucios = false;
+    $("b-guardar-ajustes").textContent = "Guardar ajustes";
+  }
+
+  function pintarAjustes(forzar) {
+    if (ajustesSucios && !forzar) return;   // no le pises lo que está escribiendo
     var rej = $("rejilla-params");
     rej.textContent = ""; refsParams = {};
     FICHA_PARAMS.forEach(function (f) {
       var clave = f[0], etiqueta = f[1], unidad = f[2], ayuda = f[3];
       var e = entrada("number", PARAMS[clave], { step:"any", min:"0", id:"ap-" + clave });
       e.disabled = puedeEscribir === false;
+      e.addEventListener("input", marcarSucio);
       refsParams[clave] = e;
       rej.appendChild(campo(etiqueta + (unidad ? " (" + unidad + ")" : ""), e, ayuda));
     });
@@ -1578,6 +1659,7 @@
                           { min:"0", step:"0.5", placeholder:"—",
                             "aria-label": etapa + " " + t.id + " " + d });
           e.disabled = puedeEscribir === false;
+          e.addEventListener("input", marcarSucio);
           refsTiempos[etapa + "|" + t.id + "|" + d] = e;
           td.appendChild(e); fila.appendChild(td);
         });
@@ -1609,13 +1691,21 @@
     var copiaParams = {};
     Object.keys(PARAMS).forEach(function (k) { copiaParams[k] = PARAMS[k]; });
     pedir("db").then(function (d) {
-      if (!d) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
+      if (!d) {
+        limpiarSucio();
+        reportar("Guardado solo en esta pantalla: no hay conexión con la base.",
+                 "mal", "a-reporte");
+        return;
+      }
       db = d;
       return Promise.all([
         d.doc("config/parametros").set(copiaParams),
         d.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS)))
       ]).then(function () {
-        toast("Ajustes guardados. Cuéntale al bot si cambiaste un costo.");
+        limpiarSucio();
+        reportar("Guardado. Si cambiaste un costo, cuéntaselo también al bot.",
+                 null, "a-reporte");
+        toast("Ajustes guardados");
       }).catch(function (e) {
         if (e && e.code === "invalid_argument") {
           puedeEscribir = false; pintarAjustes();
@@ -2711,7 +2801,9 @@
       bajarPDF(salida.doc, salida.nombre, "a-reporte");
     });
     $("b-descartar").addEventListener("click", function () {
-      pintarAjustes(); toast("Los campos volvieron a los valores guardados");
+      limpiarSucio(); pintarAjustes(true);
+      reportar("", null, "a-reporte");
+      toast("Los campos volvieron a los valores guardados");
     });
 
     $("b-nuevo").addEventListener("click", function () {
@@ -2759,6 +2851,7 @@
           $(p[1]).hidden = !activa;
         });
         if (par[0] === "tab-ajustes") pintarAjustes();
+        else if (ajustesSucios) toast("Ojo: dejaste cambios sin guardar en Ajustes");
         try { localStorage.setItem("amphora-tab", par[0]); } catch (e) {}
       });
     });
