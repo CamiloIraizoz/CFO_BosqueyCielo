@@ -136,6 +136,9 @@
   .mini { list-style:none; margin:12px 0 0; padding:0; font-size:12.5px; }
   .mini li { display:flex; justify-content:space-between; gap:12px; padding:3px 0; color:var(--muted); }
   .mini li b { color:var(--ink); font-weight:500; }
+  .mini li.grupo { color:var(--ink); font-weight:500; margin-top:5px; }
+  .mini li.grupo:first-child { margin-top:0; }
+  .mini li.hijo { padding-left:13px; font-size:12px; }
 
   .agregar { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .conteo { color:var(--muted); font-size:12.5px; }
@@ -512,8 +515,10 @@
     <div class="panel">
       <div class="acciones" style="margin-top:0;">
         <button class="btn" id="b-guardar-ajustes">Guardar ajustes</button>
+        <button class="btn sec" id="b-plantilla">Plantilla para cronometrar</button>
         <button class="btn fantasma" id="b-descartar">Descartar cambios</button>
       </div>
+      <div class="avisos" id="a-reporte"></div>
       <p class="pista" style="margin:14px 0 0;">Esto cambia el precio en la página. El bot de Telegram lee los mismos números de la hoja <b>Cotizador Interno</b>: si cambias algo acá, dile al bot o escríbelo también en la hoja para que los dos coticen igual.</p>
     </div>
   </section>
@@ -802,10 +807,24 @@
       dificultad:dificultad, estandar:estandar,
       minutos:Math.round(minutos * 10) / 10, porEtapa:porEtapa,
       valorHora:valorHora, notas:limpio(it.notas),
-      costos: [
-        ["Materiales", materiales], ["Mano de obra", manoObra],
-        ["Empaque (del pedido)", empaque], ["Desperdicio", desperdicio], ["Mercadeo", mercadeo],
-        ["Arriendo y servicios", arriendo], ["Administración", admin]
+      // Agrupados como los pide contabilidad: materia prima, mano de obra e
+      // indirectos, con el desperdicio aparte porque sale de las dos primeras.
+      grupos: [
+        ["Materia prima", materiales + empaque + quema, [
+          ["Bizcocho", bizcocho], ["Esmaltes", esmaltes],
+          ["Vinilo o transfer", vinilo], ["Empaque (del pedido)", empaque],
+          ["Quema", quema]
+        ]],
+        ["Mano de obra", manoObra, [
+          [Math.round(minutos * 10) / 10 + " min a " + pesos(valorHora) + " la hora", manoObra]
+        ]],
+        ["Desperdicio", desperdicio, [
+          [Number(P.desperdicio_pct) + "% sobre materia prima y mano de obra", desperdicio]
+        ]],
+        ["Costos indirectos", mercadeo + arriendo + admin, [
+          ["Mercadeo", mercadeo], ["Arriendo y servicios", arriendo],
+          ["Administración", admin]
+        ]]
       ],
       granTotal:granTotal, margen:pvp - granTotal, pvp:pvp,
       descuentoPct:descPct, bruto:bruto, descuento:descuento, total:bruto - descuento,
@@ -1072,19 +1091,26 @@
       it._precioNota.textContent = pesos(l.pvp) + " c/u · " + l.minutos + " min" +
                                    (l.descuentoPct ? " · -" + l.descuentoPct + "%" : "");
       it._mini.textContent = "";
-      l.costos.forEach(function (c) {
-        if (c[1]) it._mini.appendChild(miniLinea(c[0], pesos(c[1])));
+      l.grupos.forEach(function (g) {
+        if (!g[1]) return;
+        it._mini.appendChild(miniLinea(g[0], pesos(g[1]), "grupo"));
+        if (g[2].length > 1) {
+          g[2].forEach(function (d) {
+            if (d[1]) it._mini.appendChild(miniLinea(d[0], pesos(d[1]), "hijo"));
+          });
+        }
       });
-      it._mini.appendChild(miniLinea("Costo + gastos", pesos(l.granTotal)));
+      it._mini.appendChild(miniLinea("Costo + gastos", pesos(l.granTotal), "grupo"));
       it._mini.appendChild(miniLinea("Margen", pesos(l.margen)));
-      it._mini.appendChild(miniLinea("PVP por pieza", pesos(l.pvp)));
+      it._mini.appendChild(miniLinea("PVP por pieza", pesos(l.pvp), "grupo"));
     });
 
     pintarResumen(r);
   }
 
-  function miniLinea(etiqueta, valor) {
+  function miniLinea(etiqueta, valor, clase) {
     var li = document.createElement("li");
+    if (clase) li.className = clase;
     var a = document.createElement("span"); a.textContent = etiqueta;
     var b = document.createElement("b"); b.className = "num"; b.textContent = valor;
     li.appendChild(a); li.appendChild(b);
@@ -1597,6 +1623,113 @@
         } else { toast("No se pudieron guardar los ajustes"); }
       });
     });
+  }
+
+  // ── Plantilla para cronometrar en planta ──────────────────────────
+  // Se imprime y se llena a mano; después los números se pasan a Ajustes.
+  // Hoja 1: la grilla que hay que completar, con lo ya medido en gris.
+  // Hoja 2: renglones para cronometrar pieza por pieza y sacar el promedio.
+  function plantillaTiempos() {
+    if (!hayJsPDF("a-reporte")) return null;
+    var doc = new window.jspdf.jsPDF({ unit:"pt", format:"a4" });
+    var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+    var M = 42, x2 = W - M;
+
+    function titulo(texto, subtitulo) {
+      doc.setFillColor(ROSA[0], ROSA[1], ROSA[2]); doc.rect(0, 0, W, 70, "F");
+      doc.setTextColor(255); doc.setFont("times", "normal"); doc.setFontSize(20);
+      doc.text("Bosque y Cielo", M, 34);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+      doc.text(texto, M, 52);
+      doc.setFontSize(8.5);
+      doc.text(fechaCorta(hoyISO()), x2, 52, { align:"right" });
+      doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      var y = 96;
+      doc.splitTextToSize(subtitulo, x2 - M).forEach(function (t, i) {
+        doc.text(t, M, y + i * 13);
+      });
+      return y + doc.splitTextToSize(subtitulo, x2 - M).length * 13 + 12;
+    }
+
+    // ── Hoja 1
+    var y = titulo("PLANTILLA DE TIEMPOS ESTÁNDAR",
+      "Cronometra unas cuantas piezas de cada tamaño y escribe el promedio en minutos. " +
+      "Los números en gris son los que ya están cargados: si midiendo te da otra cosa, " +
+      "escribe el nuevo encima. Lo que quede en blanco no se le cobra al cliente.");
+
+    Object.keys(TIEMPOS).forEach(function (etapa) {
+      if (y + 150 > H - 60) { doc.addPage(); y = 60; }
+      doc.setFont("times", "normal"); doc.setFontSize(13);
+      doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+      doc.text(etapa, M, y);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+      doc.text(PISTA_ETAPA[etapa] || "", M, y + 12);
+      y += 26;
+
+      var anchoTam = 96, anchoCol = (x2 - M - anchoTam) / 3;
+      doc.setFillColor(246, 238, 235); doc.rect(M, y, x2 - M, 20, "F");
+      doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(7.5);
+      doc.text("TAMAÑO", M + 8, y + 13);
+      ["FÁCIL", "MEDIO", "DIFÍCIL"].forEach(function (d, i) {
+        doc.text(d, M + anchoTam + anchoCol * i + 8, y + 13);
+      });
+      y += 20;
+
+      TAMANOS.forEach(function (t) {
+        doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]);
+        doc.rect(M, y, x2 - M, 26);
+        doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+        doc.text(t.id, M + 8, y + 17);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+        doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+        doc.text(t.nota, M + 28, y + 17);
+        DIFICULTADES.forEach(function (dif, i) {
+          var x = M + anchoTam + anchoCol * i;
+          doc.line(x, y, x, y + 26);
+          var valor = (TIEMPOS[etapa][t.id] || {})[dif];
+          if (valor != null) {
+            doc.setTextColor(178, 165, 160); doc.setFontSize(10);
+            doc.text(String(valor) + " min", x + 8, y + 17);
+          }
+        });
+        y += 26;
+      });
+      y += 22;
+    });
+
+    // ── Hoja 2: toma de tiempos
+    doc.addPage();
+    y = titulo("HOJA DE TOMA DE TIEMPOS",
+      "Un renglón por pieza cronometrada. Al final saca el promedio de cada grupo " +
+      "(misma etapa, mismo tamaño, misma dificultad) y ese es el que va en la plantilla.");
+
+    var cols = [["FECHA", 58], ["PIEZA", 116], ["TAMAÑO", 48], ["DIFICULTAD", 62],
+                ["ETAPA", 108], ["INICIO", 44], ["FIN", 44], ["MIN", 40]];
+    function fila(alto, relleno) {
+      var x = M;
+      if (relleno) { doc.setFillColor(250, 246, 244); doc.rect(M, y, x2 - M, alto, "F"); }
+      doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]);
+      doc.rect(M, y, x2 - M, alto);
+      cols.forEach(function (c) { x += c[1]; if (x < x2) doc.line(x, y, x, y + alto); });
+      y += alto;
+    }
+    doc.setFillColor(246, 238, 235); doc.rect(M, y, x2 - M, 20, "F");
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]); doc.setFontSize(7);
+    var xc = M;
+    cols.forEach(function (c) { doc.text(c[0], xc + 6, y + 13); xc += c[1]; });
+    y += 20;
+    for (var i = 0; i < 22 && y + 24 < H - 70; i++) fila(24, i % 2 === 1);
+
+    y += 18;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+    doc.text("Quién midió: ________________________          " +
+             "Observaciones: ______________________________________________", M, y);
+
+    return { doc:doc, nombre:"Plantilla_tiempos_" + hoyISO() + ".pdf" };
   }
 
   // ══ POTTERY LAB ═══════════════════════════════════════════════════
@@ -2570,6 +2703,13 @@
 
     $("b-bot").addEventListener("click", copiarParaBot);
     $("b-guardar-ajustes").addEventListener("click", guardarAjustes);
+    $("b-plantilla").addEventListener("click", function () {
+      var salida;
+      try { salida = plantillaTiempos(); }
+      catch (e) { reportar("No se pudo armar la plantilla: " + ((e && e.message) || e), "mal", "a-reporte"); return; }
+      if (!salida) return;
+      bajarPDF(salida.doc, salida.nombre, "a-reporte");
+    });
     $("b-descartar").addEventListener("click", function () {
       pintarAjustes(); toast("Los campos volvieron a los valores guardados");
     });

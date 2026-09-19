@@ -495,6 +495,32 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     descuento_linea = bruto_linea * descuento_pct / 100.0
     total_linea     = bruto_linea - descuento_linea
 
+    # ── Los costos agrupados como los pide contabilidad: materia prima, mano de
+    #    obra e indirectos, con el desperdicio aparte porque sale de las dos
+    #    primeras (asesor de producción y costos, 2026-09-19).
+    indirectos = mercadeo + arriendo + admin
+    grupos = [
+        ("Materia prima", materiales + empaque + quemas, [
+            ("Bizcocho", float(params["costo_bizcocho"])),
+            ("Esmaltes", costo_esmaltes),
+            ("Vinilo o transfer", float(params["costo_vinilo"])),
+            ("Empaque (del pedido, por pieza)", empaque),
+            ("Quema", quemas),
+        ]),
+        ("Mano de obra", costo_mo, [
+            (f"{round(minutos_totales, 1)} min a {_fmt(valor_hora)} la hora", costo_mo),
+        ]),
+        ("Desperdicio", desperdicio, [
+            (f"{float(params['desperdicio_pct']):g}% sobre materia prima y mano de obra",
+             desperdicio),
+        ]),
+        ("Costos indirectos", indirectos, [
+            ("Mercadeo", mercadeo),
+            ("Arriendo y servicios", arriendo),
+            ("Administración", admin),
+        ]),
+    ]
+
     return {
         "producto": producto, "cantidad": int(cantidad),
         "tamano": tamano, "dificultad": dificultad,
@@ -512,6 +538,11 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
             ("Arriendo y servicios (incluye quemas)", arriendo),
             ("Gastos administrativos", admin),
         ],
+        "grupos": [(titulo, round(total), [(e, round(v)) for e, v in detalle])
+                   for titulo, total, detalle in grupos],
+        "materia_prima": round(materiales + empaque + quemas),
+        "mano_de_obra":  round(costo_mo),
+        "indirectos":    round(indirectos),
         "costo_directo": round(costo_directo),
         "directo_total": round(directo_total),
         "gran_total":    round(gran_total),
@@ -722,10 +753,10 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
         ["", "", ""],
         ["COSTO POR PIEZA", "", ""],
     ]
-    notas_desglose = {"Quema del esmalte": "única quema (el bizcocho se compra quemado); "
-                                           "en cero porque su energía va en servicios"}
-    filas += [[etiqueta, round(valor), notas_desglose.get(etiqueta, "")]
-              for etiqueta, valor in r["desglose"]]
+    for titulo, total, detalle in r["grupos"]:
+        filas.append([titulo.upper(), round(total), ""])
+        if len(detalle) > 1:
+            filas += [["  " + etiqueta, round(valor), ""] for etiqueta, valor in detalle if valor]
     filas += [
         ["Costo + gastos por pieza", r["gran_total"], ""],
         ["", "", ""],
@@ -842,9 +873,13 @@ def formato_telegram(r: dict) -> str:
         lineas.append("  (" + " · ".join(f"{k.lower()} {v}"
                                          for k, v in r["minutos_por_etapa"].items()) + ")")
     lineas.append("")
-    for etiqueta, valor in r["desglose"]:
-        if valor:
-            lineas.append(f"  {etiqueta}: {_fmt(valor)}")
+    for titulo, total, detalle in r["grupos"]:
+        if not total:
+            continue
+        lineas.append(f"  {titulo.upper()}: {_fmt(total)}")
+        for etiqueta, valor in detalle:
+            if valor and len(detalle) > 1:
+                lineas.append(f"     · {etiqueta}: {_fmt(valor)}")
     lineas += [
         "",
         f"Costo + gastos por pieza: {_fmt(r['gran_total'])}",

@@ -88,3 +88,40 @@ Si al pegarlo no responde como debe, revisar que Railway haya desplegado.
 `python3 execution/verificar_hubspot.py --escritura` (pasando `HUBSPOT_TOKEN` por
 entorno). Si el PDF se adjunta bien a las notas, ya está: el bot lo dice en cada
 cotización con "nota con PDF adjunto".
+
+---
+
+## Lo que trajo el asesor de producción y costos (2026-09-19)
+
+Doce puntos de Camilo. Los dos primeros ya están hechos; el resto está ordenado por lo
+que desbloquea, no por el número.
+
+**Hecho**
+- **(4) Separar costos** — el desglose ya sale agrupado en materia prima, mano de obra,
+  desperdicio y costos indirectos, en la página, en el bot y en la hoja de cada cotización.
+- **(1) Plantilla de tiempos para imprimir** — botón *Plantilla para cronometrar* en
+  Ajustes. Hoja 1: la grilla etapa × tamaño × dificultad con lo ya medido en gris.
+  Hoja 2: renglones para cronometrar pieza por pieza y sacar el promedio.
+
+**El nudo: un catálogo de bizcochos** — junta los puntos 2, 3, 5, 6 y 9
+Una referencia por bizcocho con: serial, nombre, alto, largo, ancho, peso, foto, tamaño
+(XS-XL, que hoy se elige a mano y debería salir del peso), costo y onzas de esmalte
+estándar. Con eso el cotizador deja de pedir datos sueltos: se elige la referencia y el
+resto sale solo. Falta que Camilo levante la lista con fotos y medidas.
+
+**Decisiones que faltan** (cada una cambia el precio)
+- **(9) Onzas de esmalte por tamaño** — hoy hay un solo valor para todo. Debería ser una
+  tabla por tamaño, como los tiempos. Falta el consumo real por tamaño.
+- **(10) Vinilo** — ¿lleva o no lleva? ¿el costo va por pieza, por tamaño o por cantidad
+  de vinilo? Falta la regla.
+- **(11) Quemas y hornos** — hoy el costo de quema va en cero porque su energía está
+  dentro de servicios públicos. Si se quiere costear por hornada hay que medir el consumo
+  y **sacarlo** de servicios, o se cuenta dos veces.
+- **(12) Capacidad de los hornos** — cuántas piezas de cada tamaño caben en una hornada.
+  Sirve para dos cosas: repartir el costo de la quema y ser el tope de producción
+  ("este pedido son 4 hornadas").
+- **(8) Botón «llega modelado»** — cuando la pieza no se compra en bizcocho sino que se
+  modela en casa. Cambia el material (arcilla en vez de bizcocho) y suma las etapas de
+  modelado, que todavía no están medidas.
+- **(7) «Acabado medio»** — Camilo quiere revisar ese rótulo. Falta saber qué le incomoda:
+  el nombre, la regla que lo calcula, o que no se vea de dónde sale.
