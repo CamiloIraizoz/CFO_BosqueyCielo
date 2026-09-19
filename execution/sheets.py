@@ -31,6 +31,20 @@ def _service():
     return _service_cache
 
 
+def correo_servicio() -> str:
+    """El correo de la cuenta de servicio del bot. Es el que hay que invitar a una
+    hoja para que el bot pueda leerla o escribirla; sin eso, Google responde 403."""
+    try:
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if creds_json:
+            info = json.loads(creds_json)
+        else:
+            info = json.loads((Path(__file__).parent.parent / "google_credentials.json").read_text())
+        return info.get("client_email", "")
+    except Exception:
+        return ""
+
+
 def leer_sheet(rango: str, sheet_id: str = "") -> str:
     try:
         result = _service().spreadsheets().values().get(

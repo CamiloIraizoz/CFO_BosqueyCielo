@@ -792,7 +792,7 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
     pestana = _nombre_pestana(r, numero)
     respuesta = crear_pestana(pestana, sheet_id=COTIZACIONES_SHEET_ID)
     if respuesta.startswith("Error"):
-        return f"❌ No se pudo crear la hoja: {respuesta}"
+        return f"❌ No se pudo crear la hoja: {_explicar_403(respuesta)}"
 
     p = r.get("params_usados", {})
     filas = [
@@ -859,6 +859,22 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
     return f"📄 Detalle guardado en la pestaña '{pestana}' del Cotizador Interno."
 
 
+def _explicar_403(mensaje: str) -> str:
+    """Un 403 de Sheets siempre es lo mismo: la hoja no está compartida con el bot.
+    Decir con quién hay que compartirla ahorra la adivinanza."""
+    if "403" not in str(mensaje):
+        return mensaje
+    try:
+        from sheets import correo_servicio
+        correo = correo_servicio()
+    except Exception:
+        correo = ""
+    detalle = (f" Comparte el Cotizador Interno (con permiso de Editor) con "
+               f"{correo}." if correo else
+               " Hay que compartir el Cotizador Interno con la cuenta de servicio del bot.")
+    return mensaje + detalle
+
+
 def guardar_hoja_pedido(r: dict, numero: str = "") -> str:
     """Deja una pestaña con el pedido completo: una fila por referencia, los totales y
     los parámetros usados. Es la versión de varias líneas de guardar_hoja_cotizacion."""
@@ -871,7 +887,7 @@ def guardar_hoja_pedido(r: dict, numero: str = "") -> str:
     pestana = _nombre_pestana(etiqueta, numero)
     respuesta = crear_pestana(pestana, sheet_id=COTIZACIONES_SHEET_ID)
     if respuesta.startswith("Error"):
-        return f"❌ No se pudo crear la hoja: {respuesta}"
+        return f"❌ No se pudo crear la hoja: {_explicar_403(respuesta)}"
 
     filas = [
         [f"COTIZACIÓN — {r.get('cliente') or 'Interna'}", "", "", "", "", "", ""],

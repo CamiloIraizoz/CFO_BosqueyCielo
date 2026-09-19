@@ -227,7 +227,24 @@
   .visor-top { display:flex; gap:10px; align-items:center; padding:12px 14px;
                border-bottom:1px solid var(--line); }
   .visor-top b { flex:1 1 auto; font-weight:500; font-size:14px; }
-  .visor iframe { flex:1 1 auto; width:100%; border:0; background:var(--surface-2); }
+  .visor-hoja { flex:1 1 auto; overflow:auto; padding:26px 30px; background:var(--surface); }
+  .visor-hoja h3 { font-family:var(--serif); font-size:20px; margin-bottom:2px; }
+  .visor-hoja .v-sub { color:var(--muted); font-size:12px; margin-bottom:18px; }
+  .visor-hoja table { width:100%; border-collapse:collapse; font-size:13.5px; margin-bottom:16px; }
+  .visor-hoja th { text-align:left; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+                   color:#fff; background:var(--accent); padding:7px 9px; font-weight:500; }
+  .visor-hoja th.der, .visor-hoja td.der { text-align:right; }
+  .visor-hoja td { padding:9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .visor-hoja td small { display:block; color:var(--muted); font-size:11.5px; }
+  .visor-hoja .v-tot { display:flex; justify-content:flex-end; gap:22px; font-size:13.5px; padding:3px 9px; }
+  .visor-hoja .v-tot span { color:var(--muted); }
+  .visor-hoja .v-tot b { min-width:110px; text-align:right; font-weight:500; }
+  .visor-hoja .v-gran { background:var(--accent); color:#fff; border-radius:8px;
+                        padding:11px 14px; display:flex; justify-content:space-between;
+                        font-family:var(--serif); font-size:17px; margin-top:10px; }
+  .visor-hoja .v-cond { display:flex; gap:26px; flex-wrap:wrap; margin-top:18px;
+                        font-size:12.5px; color:var(--muted); }
+  .visor-hoja .v-cond b { display:block; color:var(--ink); font-weight:500; font-size:13.5px; }
   .visor-pie { margin:0; padding:9px 14px; font-size:12px; color:var(--muted);
                border-top:1px solid var(--line); }
 
@@ -380,10 +397,14 @@
           <div class="acciones">
             <button class="btn" id="b-pdf">Descargar PDF</button>
             <button class="btn sec" id="b-ver">Ver PDF</button>
-            <button class="btn sec" id="b-guardar">Guardar</button>
-            <button class="btn fantasma" id="b-bot">Copiar para el bot</button>
+            <button class="btn sec" id="b-guardar">Guardar acá</button>
+            <button class="btn fantasma" id="b-bot">Mandar al bot</button>
             <button class="btn fantasma" id="b-limpiar">Empezar de nuevo</button>
           </div>
+          <p class="pista" style="margin:10px 0 0; font-size:12px;">
+            <b>Guardar acá</b> la deja en el historial de esta página.
+            <b>Mandar al bot</b> copia el texto para pegarlo en Telegram: el bot es el que
+            la escribe en el Cotizador Interno y la registra en HubSpot.</p>
           <div class="avisos" id="r-reporte"></div>
         </div>
       </div>
@@ -517,6 +538,12 @@
     </div>
 
     <div class="panel">
+      <h2>Materiales por tamaño</h2>
+      <p class="pista">Una matera lleva más bizcocho y más esmalte que un pocillo. Lo que dejes vacío usa el valor general de arriba. Mientras esto esté vacío, cambiar de tamaño solo mueve el tiempo de trabajo, no los materiales.</p>
+      <div id="tabla-materiales"></div>
+    </div>
+
+    <div class="panel">
       <h2>Quema y capacidad del horno</h2>
       <p class="pista">Las tablas del Discovery que faltan por llenar. La capacidad es la regla de oro: marca cuántas piezas caben por hornada y de ahí sale el tope de producción y el plazo de entrega.</p>
       <div id="tabla-horno"></div>
@@ -541,8 +568,8 @@
         <button class="btn sec chiquito" id="visor-bajar">Descargar</button>
         <button class="icono" id="visor-cerrar" aria-label="Cerrar vista previa">✕</button>
       </div>
-      <iframe id="visor-marco" title="Cotización en PDF"></iframe>
-      <p class="visor-pie">Si la descarga no funciona, desde acá puedes imprimir o guardar el PDF con el visor del navegador.</p>
+      <div id="visor-marco" class="visor-hoja"></div>
+      <p class="visor-pie">Así va a salir la cotización. Para el archivo, usa Descargar.</p>
     </div>
   </div>
 </main>
@@ -611,6 +638,14 @@
   };
   // Las bases viejas guardaron otros nombres.
   var ETAPAS_VIEJAS = { "Terminado y empaque": "Terminado, calidad y empaque" };
+
+  // Materiales por tamaño. Sin esto, cambiar de S a XL no movía un peso del
+  // costo de materiales: una matera lleva más bizcocho y más esmalte que un
+  // pocillo. Vacío = se usa el valor general de Ajustes.
+  var MATERIAL_TAMANO = {
+    bizcocho: { XS:"", S:"", M:"", L:"", XL:"" },
+    oz_esmalte: { XS:"", S:"", M:"", L:"", XL:"" }
+  };
 
   // Quema y horno (Discovery, Frente 1): la quema es una hornada con su
   // temperatura y su enfriamiento, y el horno cabe distinto según el tamaño.
@@ -811,8 +846,15 @@
     var manoObra = (minutos / 60) * valorHora;
 
     // Materiales — cada referencia puede traer los suyos
-    var bizcocho = conAjuste(it.bizcocho, P.costo_bizcocho);
-    var onzas = conAjuste(it.onzas, P.oz_esmalte_por_pieza);
+    // Orden de mando: lo de la referencia · lo del tamaño · el valor general.
+    var porTamano = function (mapa, general) {
+      var v = mapa[it.tamano];
+      return limpio(v) === "" ? (Number(general) || 0) : numero(v, 0);
+    };
+    var bizcocho = limpio(it.bizcocho) !== "" ? numero(it.bizcocho, 0)
+                 : porTamano(MATERIAL_TAMANO.bizcocho, P.costo_bizcocho);
+    var onzas = limpio(it.onzas) !== "" ? numero(it.onzas, 0)
+              : porTamano(MATERIAL_TAMANO.oz_esmalte, P.oz_esmalte_por_pieza);
     var esmaltes = onzas ? onzas * Number(P.precio_oz_esmalte) : Number(P.costo_esmaltes) || 0;
     var vinilo = conAjuste(it.vinilo, P.costo_vinilo);
     // El empaque es del pedido, no de la pieza: llega ya repartido.
@@ -1250,9 +1292,12 @@
     var pie = document.createElement("div");
     pie.style.marginTop = "4px";
     if (aMano) {
+      pie.className = "aviso";
+      pie.style.marginTop = "8px";
       var aviso = document.createElement("span");
       aviso.innerHTML = "Le pusiste <b>" + numero(it.minutos_acabado, 0) +
-        " min</b> a mano, así que la dificultad no cambia el precio" +
+        " min</b> a mano: mientras eso esté, ni la decoración ni el tamaño mueven el " +
+        "precio del trabajo" +
         (l.estandar != null ? " (el estándar sería " + l.estandar + " min)" : "") + ". ";
       pie.appendChild(aviso);
       var volver = document.createElement("button");
@@ -1527,7 +1572,7 @@
     toast("Preparando la descarga…");
     pedir("downloads").then(function (d) {
       downloads = d;
-      if (!d) { sinDescarga("Esta vista no tiene permiso para descargar archivos.", doc, nombre, caja); return; }
+      if (!d) { sinDescarga("Esta vista no tiene permiso para descargar archivos.", caja); return; }
 
       // El ArrayBuffer se transfiere y queda inservible: uno nuevo por intento.
       var guardado = d.save({ filename:nombre, data:doc.output("arraybuffer") });
@@ -1551,39 +1596,95 @@
             return;
           }
           if (codigo === "sin_respuesta") {
-            sinDescarga("El visor no respondió a la descarga. Te abrí la cotización acá: " +
-                        "guárdala o imprímela desde el visor del navegador.", doc, nombre, caja);
+            sinDescarga("El visor de Claude no respondió a la descarga.", caja);
             return;
           }
           sinDescarga(MOTIVOS_DESCARGA[codigo] ||
                       ("No se pudo descargar (" + codigo + "): " +
-                       ((e && e.message) || "sin detalle") + "."), doc, nombre, caja);
+                       ((e && e.message) || "sin detalle") + "."), caja);
         });
     }).catch(function (e) {
       reportar("No se pudo pedir la descarga: " + ((e && e.message) || e), "mal", caja);
     });
   }
 
-  function sinDescarga(mensaje, doc, nombre, caja) {
-    reportar(mensaje, "mal", caja);
-    mostrarPDF(doc, nombre, caja);
+  function sinDescarga(mensaje, caja) {
+    reportar(mensaje + " Te dejé la vista previa abierta.", "mal", caja);
+    if (caja === "rp-reporte") verPDFPottery(); else verPDF();
   }
 
-  // El PDF dentro de la página: desde el visor del navegador se guarda o imprime.
-  function mostrarPDF(doc, nombre, caja) {
-    var fuente = "";
-    try {
-      if (urlVisor) URL.revokeObjectURL(urlVisor);
-      urlVisor = URL.createObjectURL(doc.output("blob"));
-      fuente = urlVisor;
-    } catch (e) {
-      urlVisor = null;
-      try { fuente = doc.output("datauristring"); } catch (e2) { fuente = ""; }
-    }
-    if (!fuente) { reportar("No se pudo abrir la vista previa", "mal", caja); return; }
+  // Vista previa de la cotización. Antes era el PDF dentro de un iframe, pero el
+  // navegador no lo dibuja dentro de un artifact y salía el ícono de archivo roto.
+  // Se muestra el mismo contenido en HTML, que sí se ve en cualquier parte.
+  function mostrarPDF(nombre, pintar) {
+    var hoja = $("visor-marco");
+    hoja.textContent = "";
+    try { pintar(hoja); }
+    catch (e) { reportar("No se pudo armar la vista previa", "mal"); return; }
     $("visor-nombre").textContent = nombre;
-    $("visor-marco").src = fuente;
     $("visor").hidden = false;
+  }
+
+  function vistaCabecera(hoja, titulo, sub) {
+    var h = document.createElement("h3"); h.textContent = titulo;
+    var s2 = document.createElement("div"); s2.className = "v-sub"; s2.textContent = sub;
+    hoja.appendChild(h); hoja.appendChild(s2);
+  }
+
+  function vistaTabla(hoja, columnas, filas) {
+    var t = document.createElement("table");
+    var thead = document.createElement("thead"), tr = document.createElement("tr");
+    columnas.forEach(function (c) {
+      var th = document.createElement("th");
+      th.textContent = c[0]; if (c[1]) th.className = "der";
+      tr.appendChild(th);
+    });
+    thead.appendChild(tr); t.appendChild(thead);
+    var tb = document.createElement("tbody");
+    filas.forEach(function (f) {
+      var fila = document.createElement("tr");
+      f.forEach(function (celda, i) {
+        var td = document.createElement("td");
+        if (columnas[i][1]) td.className = "der";
+        if (celda && celda.principal !== undefined) {
+          td.appendChild(document.createTextNode(celda.principal));
+          if (celda.detalle) {
+            var sm = document.createElement("small"); sm.textContent = celda.detalle;
+            td.appendChild(sm);
+          }
+        } else { td.textContent = celda; }
+        fila.appendChild(td);
+      });
+      tb.appendChild(fila);
+    });
+    t.appendChild(tb); hoja.appendChild(t);
+  }
+
+  function vistaTotal(hoja, etiqueta, valor) {
+    var d = document.createElement("div"); d.className = "v-tot";
+    var a = document.createElement("span"); a.textContent = etiqueta;
+    var b = document.createElement("b"); b.className = "num"; b.textContent = valor;
+    d.appendChild(a); d.appendChild(b); hoja.appendChild(d);
+  }
+
+  function vistaGranTotal(hoja, valor) {
+    var d = document.createElement("div"); d.className = "v-gran";
+    var a = document.createElement("span"); a.textContent = "TOTAL";
+    var b = document.createElement("span"); b.className = "num"; b.textContent = valor;
+    d.appendChild(a); d.appendChild(b); hoja.appendChild(d);
+  }
+
+  function vistaCondiciones(hoja, pares) {
+    var d = document.createElement("div"); d.className = "v-cond";
+    pares.forEach(function (par) {
+      if (!par[1]) return;
+      var c = document.createElement("div");
+      var b = document.createElement("b"); b.textContent = par[1];
+      c.appendChild(document.createTextNode(par[0]));
+      c.appendChild(b);
+      d.appendChild(c);
+    });
+    hoja.appendChild(d);
   }
 
   function descargarPDF() {
@@ -1595,17 +1696,41 @@
   }
 
   function verPDF() {
-    var salida;
-    try { salida = armarPDF(); }
-    catch (e) { reportar("El PDF no se pudo armar: " + (e && e.message ? e.message : e), "mal"); return; }
-    if (!salida) return;
-    mostrarPDF(salida.doc, nombreArchivo(ultimo.numero, ultimo.cliente), "r-reporte");
+    var r = ultimo;
+    if (!r || !r.buenas.length) { reportar(porQueNoHayPDF(), "mal"); return; }
+    mostrarPDF(nombreArchivo(r.numero, r.cliente), function (hoja) {
+      vistaCabecera(hoja, "Cotización " + r.numero,
+        (r.cliente ? "Para " + r.cliente + " · " : "") + fechaCorta(hoyISO()) +
+        " · " + r.piezas + " piezas");
+      vistaTabla(hoja,
+        [["Producto"], ["Cant.", true], ["P. unitario", true], ["Total", true]],
+        r.buenas.map(function (l, i) {
+          var detalle = "Tamaño " + l.tamano + " · acabado " + NOMBRE_DIF[l.dificultad];
+          if (l.modelado) detalle += " · modelado " + NOMBRE_DIF[l.gradoModelado];
+          if (l.descuentoPct) detalle += " · descuento " + l.descuentoPct + "%";
+          if (l.notas) detalle += " · " + l.notas;
+          return [{ principal:(l.producto || "Referencia " + (i + 1)), detalle:detalle },
+                  String(l.cantidad), pesos(l.pvp), pesos(l.total)];
+        }));
+      vistaTotal(hoja, "Subtotal", pesos(r.subtotal));
+      if (r.urgencia) vistaTotal(hoja, "Urgencia (" + r.cond.urgencia + "%)", pesos(r.urgencia));
+      if (r.descuento) vistaTotal(hoja, "Descuento (" + r.cond.descuento + "%)", "-" + pesos(r.descuento));
+      if (r.envio) vistaTotal(hoja, "Envío", pesos(r.envio));
+      if (r.desarrollo) vistaTotal(hoja, "Molde o desarrollo", pesos(r.desarrollo));
+      if (r.iva) vistaTotal(hoja, "IVA (" + PARAMS.iva_pct + "%)", pesos(r.iva));
+      vistaGranTotal(hoja, pesos(r.total));
+      vistaCondiciones(hoja, [
+        ["Condiciones de pago", r.cond.anticipo + "% anticipo · " + (100 - r.cond.anticipo) + "% contra entrega"],
+        ["Plazo de entrega", r.cond.plazo],
+        ["Validez", r.cond.validez + " días"],
+        ["Notas", r.notas]
+      ]);
+    });
   }
 
   function cerrarVisor() {
     $("visor").hidden = true;
-    $("visor-marco").removeAttribute("src");
-    if (urlVisor) { URL.revokeObjectURL(urlVisor); urlVisor = null; }
+    $("visor-marco").textContent = "";
   }
 
   function textoParaBot(r) {
@@ -1771,6 +1896,7 @@
       tabla.appendChild(tbody); g.appendChild(tabla); cont.appendChild(g);
     });
 
+    pintarMateriales();
     pintarHorno();
 
     $("b-guardar-ajustes").disabled = puedeEscribir === false;
@@ -1780,7 +1906,39 @@
     }
   }
 
-  var refsHorno = {};
+  var refsHorno = {}, refsMaterial = {};
+
+  function pintarMateriales() {
+    var cont = $("tabla-materiales");
+    cont.textContent = ""; refsMaterial = {};
+    [["bizcocho", "Bizcocho $", "Por pieza"],
+     ["oz_esmalte", "Esmalte (oz)", "Onzas por pieza"]].forEach(function (grupo) {
+      var g = document.createElement("div"); g.className = "grupo-tiempos";
+      var h = document.createElement("h3"); h.textContent = grupo[1];
+      var pp = document.createElement("p"); pp.textContent = grupo[2];
+      g.appendChild(h); g.appendChild(pp);
+      var rej = document.createElement("div"); rej.className = "rejilla";
+      TAMANOS.forEach(function (t) {
+        var general = grupo[0] === "bizcocho" ? PARAMS.costo_bizcocho : PARAMS.oz_esmalte_por_pieza;
+        var e = entrada("number", MATERIAL_TAMANO[grupo[0]][t.id],
+                        { min:"0", step:grupo[0] === "bizcocho" ? "100" : "0.25",
+                          id:"mt-" + grupo[0] + "-" + t.id,
+                          placeholder:String(Number(general) || 0) });
+        e.disabled = puedeEscribir === false;
+        e.addEventListener("input", marcarSucio);
+        refsMaterial[grupo[0] + "|" + t.id] = e;
+        rej.appendChild(campo(t.id + " (" + t.nota + ")", e));
+      });
+      g.appendChild(rej); cont.appendChild(g);
+    });
+  }
+
+  function leerMateriales() {
+    Object.keys(refsMaterial).forEach(function (llave) {
+      var partes = llave.split("|");
+      MATERIAL_TAMANO[partes[0]][partes[1]] = refsMaterial[llave].value;
+    });
+  }
 
   function pintarHorno() {
     var cont = $("tabla-horno");
@@ -1857,6 +2015,7 @@
       else TIEMPOS[partes[0]][partes[1]][partes[2]] = numero(v, 0);
     });
     leerHorno();
+    leerMateriales();
     recalcular();
 
     var copiaParams = {};
@@ -1872,7 +2031,8 @@
       return Promise.all([
         d.doc("config/parametros").set(copiaParams),
         d.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS))),
-        d.doc("config/horno").set(JSON.parse(JSON.stringify(HORNO)))
+        d.doc("config/horno").set(JSON.parse(JSON.stringify(HORNO))),
+        d.doc("config/materiales").set(JSON.parse(JSON.stringify(MATERIAL_TAMANO)))
       ]).then(function () {
         limpiarSucio();
         reportar("Guardado. Si cambiaste un costo, cuéntaselo también al bot.",
@@ -2386,6 +2546,39 @@
     return { doc:doc, numero:r.numero };
   }
 
+  function verPDFPottery() {
+    var r = ultimoPot;
+    if (!r || !r.buenas.length) {
+      reportar("Ponle a cada taller cuántas personas son y el precio por persona.", "mal", "rp-reporte");
+      return;
+    }
+    mostrarPDF(nombreArchivo("PotteryLab_" + r.numero, r.cliente), function (hoja) {
+      vistaCabecera(hoja, "Pottery Lab · " + r.numero,
+        (r.cliente ? "Para " + r.cliente + " · " : "") + fechaCorta(hoyISO()) +
+        " · " + r.personas + " personas");
+      vistaTabla(hoja,
+        [["Experiencia"], ["Personas", true], ["P. persona", true], ["Total", true]],
+        r.buenas.map(function (l, i) {
+          var detalle = [];
+          if (l.fecha) detalle.push(fechaCorta(l.fecha));
+          detalle.push(l.lugar === "domicilio" ? "a domicilio" : "en nuestro taller");
+          if (l.traslado) detalle.push("traslado " + pesos(l.traslado));
+          if (l.incluye) detalle.push("incluye " + l.incluye);
+          return [{ principal:(l.nombre || "Taller " + (i + 1)), detalle:detalle.join(" · ") },
+                  String(l.participantes), pesos(l.precio), pesos(l.total)];
+        }));
+      vistaTotal(hoja, "Subtotal", pesos(r.subtotal));
+      if (r.traslados) vistaTotal(hoja, "Traslados", pesos(r.traslados));
+      if (r.iva) vistaTotal(hoja, "IVA (" + PARAMS.iva_pct + "%)", pesos(r.iva));
+      vistaGranTotal(hoja, pesos(r.total));
+      vistaCondiciones(hoja, [
+        ["Condiciones de pago", r.cond.pago],
+        ["Validez", r.cond.validez + " días"],
+        ["Notas", r.notas]
+      ]);
+    });
+  }
+
   function armarPDFPottery() {
     if (!ultimoPot || !ultimoPot.buenas.length) {
       reportar("Ponle a cada taller cuántas personas son y el precio por persona.", "mal", "rp-reporte");
@@ -2485,13 +2678,7 @@
       bajarPDF(salida.doc, nombreArchivo("PotteryLab_" + ultimoPot.numero, ultimoPot.cliente), "rp-reporte");
     });
 
-    $("bp-ver").addEventListener("click", function () {
-      var salida;
-      try { salida = armarPDFPottery(); }
-      catch (e) { reportar("El PDF no se pudo armar: " + ((e && e.message) || e), "mal", "rp-reporte"); return; }
-      if (!salida) return;
-      mostrarPDF(salida.doc, nombreArchivo("PotteryLab_" + ultimoPot.numero, ultimoPot.cliente), "rp-reporte");
-    });
+    $("bp-ver").addEventListener("click", verPDFPottery);
 
     $("bp-bot").addEventListener("click", function () {
       var r = ultimoPot;
@@ -3134,6 +3321,16 @@
           Object.keys(datos).forEach(function (k) {
             if (k in PARAMS && datos[k] !== null && datos[k] !== "") PARAMS[k] = datos[k];
           });
+          recalcular();
+          if (!$("vista-ajustes").hidden) pintarAjustes();
+        }
+      }, function () {});
+
+      d.doc("config/materiales").onSnapshot(function (snap) {
+        if (snap.exists) {
+          var datos = snap.data() || {};
+          if (datos.bizcocho) MATERIAL_TAMANO.bizcocho = datos.bizcocho;
+          if (datos.oz_esmalte) MATERIAL_TAMANO.oz_esmalte = datos.oz_esmalte;
           recalcular();
           if (!$("vista-ajustes").hidden) pintarAjustes();
         }
