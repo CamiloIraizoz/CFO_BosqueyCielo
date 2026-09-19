@@ -23,6 +23,8 @@ from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal
     registrar_cotizacion as registrar_cotizacion_hs
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
+from jornadas import registrar as _jor_registrar, resumen as _jor_resumen, \
+    bitacora as _jor_bitacora
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
     guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo, \
@@ -396,6 +398,67 @@ TOOLS = [
                 "notas":   {"type": "string"}
             },
             "required": ["cliente", "etapa"]
+        }
+    },
+    {
+        "name": "registrar_jornada",
+        "description": (
+            "Anota una jornada de trabajo del taller y calcula los MINUTOS POR PIEZA. "
+            "Llámalo apenas alguien del equipo cuente qué hizo hoy: 'empecé a pintar a "
+            "las 10:00 am, terminé a las 2:00 pm, hice 10 platos'. Es la forma en que se "
+            "miden los tiempos reales que le faltan al cotizador: cada jornada es una "
+            "medición y el promedio de varias es el estándar. Pasa la tarea en las "
+            "palabras del taller (pintar, esmaltar, empacar, lijar) — el script la "
+            "traduce a la etapa del Discovery. Si no te dicen el tamaño de las piezas, "
+            "PREGÚNTALO: sin tamaño la medición no sirve para el estándar."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "persona":      {"type": "string", "description": "Quién lo hizo"},
+                "tarea":        {"type": "string", "description": "Qué hizo, como lo dijo: 'pintar platos', 'empacar', 'lijar bizcocho'"},
+                "piezas":       {"type": "integer", "description": "Cuántas piezas alcanzó a hacer"},
+                "hora_inicio":  {"type": "string", "description": "'10:00 am', '8:30', '2 pm'"},
+                "hora_fin":     {"type": "string", "description": "'2:00 pm', '12:15'"},
+                "minutos":      {"type": "number", "description": "Solo si dan la duración directa en vez de las horas"},
+                "pedido":       {"type": "string", "description": "Cliente o pedido al que pertenece, si lo dicen"},
+                "tamano":       {"type": "string", "description": "XS | S | M | L | XL"},
+                "dificultad":   {"type": "string", "description": "facil | medio | dificil"},
+                "fecha":        {"type": "string", "description": "DD/MM/YYYY. Vacío = hoy"},
+                "notas":        {"type": "string"},
+                "etapa_pedido": {"type": "string", "description": "Solo si además terminaron una etapa del pedido y hay que moverlo en Producción"}
+            },
+            "required": ["persona", "tarea", "piezas"]
+        }
+    },
+    {
+        "name": "leer_jornadas",
+        "description": (
+            "Muestra qué hizo el equipo en el taller los últimos días: quién, qué tarea, "
+            "cuántas piezas y en cuánto tiempo. Úsalo para '¿cómo va el seguimiento?', "
+            "'¿qué se hizo hoy/esta semana?', '¿en qué anda el pedido de X?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "dias":   {"type": "integer", "description": "Cuántos días hacia atrás. Por defecto 7"},
+                "pedido": {"type": "string", "description": "Opcional: filtrar por cliente o pedido"}
+            }
+        }
+    },
+    {
+        "name": "resumen_tiempos",
+        "description": (
+            "Muestra los minutos por pieza ya medidos en planta, agrupados por etapa, "
+            "tamaño y dificultad, y dice cuáles tienen jornadas suficientes para "
+            "cargarse como estándar. Úsalo cuando pregunten cómo van los tiempos, "
+            "cuánto nos demoramos en algo, o antes de proponer un estándar nuevo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "etapa": {"type": "string", "description": "Opcional: 'Modelado', 'Acabado' o 'Terminado, calidad y empaque'"}
+            }
         }
     },
     {
@@ -790,6 +853,33 @@ REGLAS:
 - NUNCA marcar entregado sin confirmación explícita.
 - Daniela habla operativamente: mensajes cortos son comandos de producción.
 
+JORNADAS DEL TALLER — el parte diario, y de paso la medición de tiempos
+────────────────────────────────────────
+Las dos personas que producen reportan por acá lo que hicieron en el día:
+  "empecé a pintar a las 10:00 am, terminé de pintar a las 2:00 pm, hice 10 platos"
+  "esmalté 20 tazas, de 8 a 12" · "empaqué el pedido de Camilo Rojas, 40 piezas, 35 minutos"
+→ registrar_jornada(persona, tarea, piezas, hora_inicio, hora_fin, ...)
+
+Esto NO es solo seguimiento: cada jornada mide MINUTOS POR PIEZA, que es el dato que
+al cotizador le falta. 4 horas / 10 platos = 24 min por plato de acabado. Con tres o
+cuatro jornadas de lo mismo ya hay un estándar creíble.
+
+Qué hacer para que la medición sirva:
+- La PERSONA: si no firma, pregunta quién es (o dedúcelo de quién escribe).
+- El TAMAÑO (XS-XL): es lo que más se les olvida y sin él la jornada no entra al
+  estándar. Pregúntalo siempre, corto: "¿de qué tamaño eran los platos?".
+- La DIFICULTAD (facil/medio/dificil): pregúntala solo si es trabajo de Acabado y no
+  es obvio; si no la dan, déjala vacía antes que inventarla.
+- Si además cerraron una etapa del pedido, pasa etapa_pedido para moverlo en Producción.
+- Una sola pregunta por mensaje. Si no saben o dicen "después", anota lo que haya y sigue.
+
+"¿qué se hizo hoy?" | "¿cómo va el seguimiento?" | "¿en qué anda [cliente]?" → leer_jornadas()
+"¿cómo vamos con los tiempos?" | "¿cuánto nos demoramos pintando?" → resumen_tiempos()
+Cuando una etapa ya tenga 3 o más jornadas, propónselo a Camilo: "el acabado de un plato
+M va en 23 min medidos en 5 jornadas, ¿lo cargo como estándar?" y con su sí llama
+guardar_tiempo_estandar. Eso reemplaza el dato de respaldo y el precio deja de ser un
+estimado.
+
 ────────────────────────────────────────
 MÓDULO FLUJO DE CAJA
 ────────────────────────────────────────
@@ -1024,6 +1114,12 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             inp.get("proceso", 1), inp["fecha_entrega"],
                             inp.get("deal_id", ""), inp.get("notas", "")
                         )
+                    elif name == "registrar_jornada":
+                        resultado = _jornada_registrar(inp)
+                    elif name == "leer_jornadas":
+                        resultado = _jor_bitacora(inp.get("dias", 7), inp.get("pedido", ""))
+                    elif name == "resumen_tiempos":
+                        resultado = _jor_resumen(inp.get("etapa", ""))
                     elif name == "actualizar_etapa_produccion":
                         resultado = _prod_actualizar(
                             inp["cliente"], inp["etapa"], inp.get("notas", "")
@@ -1435,6 +1531,21 @@ def verificar_reporte_semanal():
         print(f"[Reporte semanal] Enviado — {hoy.strftime('%d/%m/%Y')}")
     except Exception as e:
         print(f"[Reporte semanal] Error: {e}")
+
+
+def _jornada_registrar(inp):
+    """Anota la jornada y, si además cerraron una etapa, mueve el pedido."""
+    salida = _jor_registrar(
+        inp["persona"], inp["tarea"], inp["piezas"],
+        hora_inicio=inp.get("hora_inicio", ""), hora_fin=inp.get("hora_fin", ""),
+        minutos=inp.get("minutos"), pedido=inp.get("pedido", ""),
+        tamano=inp.get("tamano", ""), dificultad=inp.get("dificultad", ""),
+        fecha=inp.get("fecha", ""), notas=inp.get("notas", ""))
+    etapa = inp.get("etapa_pedido", "")
+    if etapa and inp.get("pedido"):
+        nota = f"{inp['persona']}: {inp['tarea']}, {inp['piezas']} piezas"
+        salida += "\n" + _prod_actualizar(inp["pedido"], etapa, nota)
+    return salida
 
 
 def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", notas=""):

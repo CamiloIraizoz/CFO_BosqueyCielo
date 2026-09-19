@@ -259,3 +259,33 @@ lo que hay hoy, y **$47.520** con valores de ejemplo cargados.
 - Si no hay tiempo medido para ese tamaño y dificultad, pedir los minutos. Nunca estimar.
 - Los precios de la competencia (ver `Directivas/analisis_competencia.md`) sirven para
   contrastar, no para fijar el precio: el costo manda.
+
+## De dónde salen los tiempos: las jornadas del taller
+Los minutos por etapa no se estiman ni se preguntan en abstracto: se **miden** con lo
+que el equipo reporta cada día por Telegram.
+
+> "empecé a pintar a las 10:00 am, terminé de pintar a las 2:00 pm, hice 10 platos"
+> → 240 min / 10 piezas = **24 min por plato** de la etapa *Acabado*
+
+`execution/jornadas.py` lo guarda en la pestaña **Jornadas** del *Ventas y Costos B&C*
+(A Fecha · B Persona · C Pedido · D Tarea · E Etapa · F Tamaño · G Dificultad ·
+H Piezas · I Inicio · J Fin · K Minutos · L Min/pieza · M Notas) y calcula el promedio
+**ponderado por piezas**: una jornada de 30 piezas pesa más que una de 2.
+
+- `registrar_jornada` — anota y devuelve los min/pieza más el promedio acumulado.
+  Avisa cuando una jornada se sale más del 35% del promedio: casi siempre es un dato
+  mal dictado o algo que pasó ese día, y conviene mirarlo antes de que ensucie el
+  estándar.
+- `leer_jornadas` — el parte de los últimos días (quién, qué, cuántas piezas).
+- `resumen_tiempos` — la tabla por etapa × tamaño × dificultad, diciendo cuáles ya
+  tienen 3 jornadas o más.
+
+La tarea va **en las palabras del taller** ("pintar", "empacar", "lijar"); el script la
+traduce a la etapa del Discovery con el diccionario `TAREAS`. Si no la reconoce, lo dice
+y la jornada no cuenta para el estándar — mejor eso que asignarla mal.
+
+**El tamaño es obligatorio para que sirva.** Sin XS-XL la jornada queda como registro de
+seguimiento pero no alimenta el cotizador; por eso el bot lo pregunta siempre.
+
+Con 3 o más jornadas, el paso final es `guardar_tiempo_estandar` — y ahí el precio deja
+de apoyarse en un valor de respaldo.

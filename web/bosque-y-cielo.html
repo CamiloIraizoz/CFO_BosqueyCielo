@@ -3010,7 +3010,9 @@
     pedir("db").then(function (d) {
       if (!d) { toast("Anotado solo en esta pantalla: no hay conexión con la base"); return; }
       db = d;
-      return d.collection("avances").add(fila).catch(function (e) {
+      return d.collection("avances").add(fila).then(function () {
+        refrescar("avances");
+      }).catch(function (e) {
         toast(e && e.code === "invalid_argument"
               ? "No tienes permiso para anotar en la bitácora"
               : "No se pudo guardar la anotación");
@@ -3089,7 +3091,9 @@
     pedir("db").then(function (d) {
       if (!d) { toast("Guardado solo en esta pantalla: no hay conexión con la base"); return; }
       db = d;
-      return d.collection("tareas").add(fila).catch(function () {
+      return d.collection("tareas").add(fila).then(function () {
+        refrescar("tareas");
+      }).catch(function () {
         toast("No se pudo guardar el pendiente");
       });
     });
@@ -3268,8 +3272,13 @@
           return;
         }
         db = d;
-        return d.collection("proyectos").add(nuevo).then(function () {
+        return d.collection("proyectos").add(nuevo).then(function (ref) {
           $("n-cliente").value = ""; $("n-desc").value = "";
+          // Pintarlo de una: no esperar a que la suscripción lo devuelva.
+          if (ref && ref.id && !proyectos.some(function (x) { return x.id === ref.id; })) {
+            nuevo.id = ref.id; proyectos.push(nuevo); pintarProyectos();
+          }
+          refrescar("proyectos");
           toast("Proyecto agregado");
         }).catch(function (e) {
           if (e && e.code === "invalid_argument") {
@@ -3304,6 +3313,47 @@
     var e = $("estado");
     e.textContent = texto;
     e.style.color = mal ? "var(--crit)" : "var(--muted)";
+  }
+
+  // La lista no puede depender de una sola vía: el onSnapshot es la que avisa
+  // de los cambios ajenos, pero si esa suscripción se queda muda la pantalla
+  // se ve vacía aunque la base tenga los datos. Por eso cada colección se lee
+  // también de una, al conectar y después de cada escritura propia.
+  var recoger = {};
+
+  function filasDe(snap) {
+    return (snap && snap.docs ? snap.docs : []).map(function (doc) {
+      var body = doc.data() || {};
+      body.id = doc.id;
+      return body;
+    });
+  }
+
+  function seguir(nombre, tope, aplicar, avisar) {
+    if (!db) return;
+    var consulta = db.collection(nombre).limit(tope);
+    recoger[nombre] = function () {
+      return consulta.get().then(function (snap) {
+        aplicar(filasDe(snap));
+        pintarProyectos(); resolverNombres();
+      }).catch(function () {});
+    };
+    consulta.onSnapshot(function (snap) {
+      aplicar(filasDe(snap));
+      pintarProyectos(); resolverNombres();
+    }, function (e) {
+      if (!avisar) return;
+      marcarEstado("no se pudo escuchar " + nombre +
+                   (e && e.code ? " (" + e.code + ")" : ""), true);
+      recoger[nombre]();
+    });
+    recoger[nombre]();
+  }
+
+  // Después de escribir, volver a leer: si la suscripción no entrega el cambio
+  // propio, la pantalla igual queda al día.
+  function refrescar(nombre) {
+    if (recoger[nombre]) recoger[nombre]();
   }
 
   function conectarCapacidades() {
@@ -3384,36 +3434,9 @@
         }
       }, function () {});
 
-      d.collection("proyectos").limit(200).onSnapshot(function (snap) {
-        proyectos = snap.docs.map(function (doc) {
-          var body = doc.data() || {};
-          body.id = doc.id;
-          return body;
-        });
-        pintarProyectos();
-        resolverNombres();
-      }, function () {
-        $("lista-proyectos").innerHTML = '<div class="vacio">No se pudieron cargar los proyectos.</div>';
-      });
-
-      d.collection("avances").limit(500).onSnapshot(function (snap) {
-        avances = snap.docs.map(function (doc) {
-          var body = doc.data() || {};
-          body.id = doc.id;
-          return body;
-        });
-        pintarProyectos();
-        resolverNombres();
-      }, function () {});
-
-      d.collection("tareas").limit(300).onSnapshot(function (snap) {
-        tareas = snap.docs.map(function (doc) {
-          var body = doc.data() || {};
-          body.id = doc.id;
-          return body;
-        });
-        pintarProyectos();
-      }, function () {});
+      seguir("proyectos", 200, function (filas) { proyectos = filas; }, true);
+      seguir("avances", 500, function (filas) { avances = filas; }, false);
+      seguir("tareas", 300, function (filas) { tareas = filas; }, false);
     });
   }
 

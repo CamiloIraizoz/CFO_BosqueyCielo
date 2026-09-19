@@ -125,3 +125,28 @@ resto sale solo. Falta que Camilo levante la lista con fotos y medidas.
   modelado, que todavía no están medidas.
 - **(7) «Acabado medio»** — Camilo quiere revisar ese rótulo. Falta saber qué le incomoda:
   el nombre, la regla que lo calcula, o que no se vea de dónde sale.
+
+
+---
+
+## Jornadas del taller (2026-09-19)
+
+Las dos personas que producen reportan por Telegram lo que hicieron en el día y de ahí
+salen los minutos por pieza. Ver `Directivas/cotizador.md`, sección *De dónde salen los
+tiempos*.
+
+**Lo que queda por decidir: producción tiene dos casas.**
+- Los **proyectos** viven en la base de la página (artifact), y la página es la única
+  que escribe ahí.
+- Las **jornadas** y la pestaña *Producción* viven en el Sheet, y el bot es el único
+  que escribe ahí (las credenciales de Google están en Railway).
+
+Mientras sean dos, lo que se anota en Telegram no aparece en la página y viceversa.
+Tres salidas, de menos a más trabajo:
+1. **Todo al Sheet** — la página deja de tener tablero de producción y pasa a ser solo
+   el cotizador. Lo más simple; Camilo mira el Sheet.
+2. **Todo a la página** — el equipo reporta desde el celular en la página en vez de
+   Telegram. Un solo almacén, pero cambia el hábito del taller.
+3. **Puente** — el bot sigue escribiendo al Sheet y una sincronización periódica copia
+   las jornadas a la base de la página. Es la única que mantiene las dos superficies,
+   y la más cara de sostener.
