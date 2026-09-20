@@ -58,3 +58,28 @@
 - `Pagado $X` → pago parcial
 - vacío → pendiente
 - `ANULADO` → cancelar un registro erróneo
+
+## La dimensión que falta: el pedido (2026-09-20)
+
+Todas las pestañas de arriba organizan la plata por **línea de negocio** (Shop, B2B,
+Pottery Lab…) o por **categoría de gasto** (Materia Prima, Mano de Obra…). Ninguna guarda
+a qué pedido pertenece, así que con ellas solas es imposible responder *"¿cuánto me dejó
+realmente el pedido de Camilo Rojas?"*.
+
+Por eso existe la pestaña **`Movimientos`** en *Ventas y Costos B&C* (`execution/movimientos.py`):
+Fecha · Tipo · **Pedido** · Categoría · Concepto · Monto · Forma de pago · Pestaña PNL · Notas
+
+- `registrar_movimiento` — solo para plata atribuible a un pedido. Arriendo, servicios y
+  nómina del mes **no** van acá: siguen su camino de siempre.
+- `leer_movimientos(pedido)` — cobrado, gastado, neto, y el contraste contra lo cotizado.
+
+**Ojo con el doble registro.** Un movimiento de pedido normalmente pertenece a los dos
+sitios: acá (para el margen del pedido) y en su pestaña del PNL (para el mes). La columna
+*Pestaña PNL* deja la traza de que ya se hizo. Unificarlo de verdad — que un solo registro
+alimente ambas vistas — exigiría agregarle una columna Pedido a las diez pestañas de
+ingresos y egresos, que hoy tienen cabeceras distintas entre sí. Está sin decidir.
+
+**Para qué sirve el contraste.** `leer_movimientos` compara el gasto real contra el total
+cotizado. Si el margen real sale muy por debajo del que prometía la cotización, el
+cotizador tiene costos que no está viendo — y eso es lo que hay que corregir en los
+parámetros, no en el precio.

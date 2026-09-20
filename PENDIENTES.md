@@ -157,3 +157,46 @@ Las dos personas que producen reportan por Telegram lo que hicieron en el día y
 salen los minutos por pieza. Ver `Directivas/cotizador.md`, sección *De dónde salen los
 tiempos*.
 
+
+---
+
+## Seguimiento de producción: la pensada pendiente (2026-09-20)
+
+Hoy hay tres piezas sueltas y una pregunta de fondo sin responder.
+
+**Lo que ya existe**
+- `Producción` — un renglón por pedido, con UNA etapa. Se mueve a mano.
+- `Jornadas` — quién hizo qué, cuántas piezas, cuántos minutos.
+- `Pendientes` — lo que falta hacer.
+- El avance por piezas, que `leer_produccion` deduce de las jornadas.
+
+**La pregunta de fondo: ¿el pedido está EN una etapa, o tiene piezas en varias?**
+
+Hoy el modelo dice que un pedido de 150 platos "está en pintar bizcocho". Pero en el
+taller real hay 40 pintados, 30 en el horno y 80 sin tocar. Una sola etapa por pedido no
+puede representar eso, y por eso la etapa hay que moverla a mano — es una opinión, no un
+dato.
+
+**Propuesta: el estado se deduce, no se declara.** Las jornadas ya dicen cuántas piezas
+pasaron por cada tarea. Si 150 de 150 están pintadas, el pedido pasó esa etapa solo. La
+etapa deja de ser un campo que alguien actualiza y pasa a ser el resultado de lo que el
+taller reportó. `actualizar_etapa_produccion` quedaría solo para corregir.
+
+Lo que eso desbloquea, en orden de valor:
+
+1. **¿Llegamos a la fecha?** Con los minutos por pieza medidos y las piezas que faltan,
+   sale cuántas horas de taller quedan. Contra las horas disponibles de las dos personas,
+   sale una fecha real que se puede comparar con la prometida. Es la alerta que más
+   plata salva.
+2. **El horno como tope.** `HORNO.capacidad` ya está en la página (60 XS · 40 S · 25 M ·
+   10 L · 2 XL). 150 platos M son 6 hornadas; a 12h de quema + 18h de enfriamiento son
+   ~7 días solo de horno. Eso debería salir al cotizar, no al entregar.
+3. **Dónde se atasca.** Con jornadas acumuladas se ve qué etapa se come las horas.
+4. **Avisos sin preguntar.** Pedido sin movimiento en X días; entrega cerca con piezas
+   pendientes.
+
+**Lo que falta decidir con Camilo**
+- ¿Las dos personas del taller trabajan sobre pedidos identificados, o hacen lotes que
+  mezclan pedidos? Si mezclan, la jornada necesita repartir las piezas entre pedidos.
+- ¿Cuántas horas al día pone cada una? Sin eso no hay proyección de fecha.
+- ¿La etapa deducida reemplaza a la manual, o conviven?

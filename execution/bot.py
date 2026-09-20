@@ -27,6 +27,10 @@ from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resume
 from jornadas import registrar as _jor_registrar, resumen as _jor_resumen, \
     bitacora as _jor_bitacora, avance_pedido as _jor_avance
 from pendientes import agregar as _pend_agregar, leer as _pend_leer, cerrar as _pend_cerrar
+from registro_cotizaciones import guardar_fila as _reg_cot_fila, leer as _reg_cot_leer, \
+    marcar_estado as _reg_cot_estado
+from movimientos import registrar as _mov_registrar, leer as _mov_leer, \
+    resumen_pedido as _mov_resumen
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
     guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo, \
@@ -345,6 +349,99 @@ TOOLS = [
                 "condiciones": {"type": "object", "description": "Las mismas condiciones que pasaste a calcular_precio."}
             },
             "required": []
+        }
+    },
+    {
+        "name": "registrar_cotizacion",
+        "description": (
+            "Deja una cotización registrada en los TRES sitios: la pestaña Cotizaciones "
+            "de Ventas y Costos B&C, HubSpot (contacto, negocio y ticket) y —si pasas "
+            "`lineas`— el desglose en el Cotizador Interno. Llámalo SIEMPRE que se arme "
+            "o se pegue una cotización, aunque no se envíe todavía por correo. Un fallo "
+            "en uno no impide los otros dos, así que úsalo aunque sepas que el Cotizador "
+            "Interno está bloqueado por permisos."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "numero":           {"type": "string", "description": "Ej. BYC-260917-59"},
+                "cliente_nombre":   {"type": "string"},
+                "cliente_empresa":  {"type": "string"},
+                "cliente_email":    {"type": "string"},
+                "cliente_telefono": {"type": "string"},
+                "tipo":             {"type": "string", "description": "producto | pottery"},
+                "piezas":           {"type": "integer"},
+                "total":            {"type": "integer", "description": "Total con IVA, en pesos, sin puntos"},
+                "detalle":          {"type": "string", "description": "El resumen en texto, para la nota de HubSpot"},
+                "fecha":            {"type": "string", "description": "DD/MM/YYYY. Vacío = hoy"},
+                "notas":            {"type": "string"},
+                "deal_id":          {"type": "string"},
+                "lineas":           {"type": "array", "items": {"type": "object"},
+                                     "description": "Las referencias, si quieres además el desglose en el Cotizador Interno"},
+                "condiciones":      {"type": "object"}
+            },
+            "required": ["numero", "total"]
+        }
+    },
+    {
+        "name": "leer_cotizaciones",
+        "description": "Las cotizaciones registradas, con su estado. Para '¿qué cotizaciones van?', '¿qué le cotizamos a X?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"cliente": {"type": "string", "description": "Opcional: filtrar"}}
+        }
+    },
+    {
+        "name": "marcar_cotizacion",
+        "description": "Cambia el estado de una cotización: aceptada, perdida o vencida. Así se sabe cuántas se cierran.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "numero": {"type": "string"},
+                "estado": {"type": "string", "description": "aceptada | perdida | vencida | enviada"}
+            },
+            "required": ["numero", "estado"]
+        }
+    },
+    {
+        "name": "registrar_movimiento",
+        "description": (
+            "Anota plata que entra o sale POR UN PEDIDO: el anticipo que pagó el cliente, "
+            "los bizcochos que se compraron para ese pedido, la mano de obra. Es la "
+            "dimensión que las pestañas de ingresos y egresos no tienen — ellas van por "
+            "línea de negocio, no por pedido. Si el movimiento NO es de un pedido puntual "
+            "(arriendo, servicios, nómina del mes), no uses esto: va en su pestaña de "
+            "siempre con agregar_fila."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tipo":        {"type": "string", "description": "ingreso | egreso"},
+                "monto":       {"type": "number", "description": "En pesos, sin puntos ni $"},
+                "concepto":    {"type": "string", "description": "Ej. 'Anticipo 50%', 'Bizcochos 10 tazas'"},
+                "pedido":      {"type": "string", "description": "Cliente o pedido al que pertenece"},
+                "categoria":   {"type": "string", "description": "Materia Prima · Mano de Obra · Gastos Operativos · B2B …"},
+                "fecha":       {"type": "string", "description": "DD/MM/YYYY. Vacío = hoy"},
+                "forma_pago":  {"type": "string", "description": "Bold · Efectivo · Transferencia"},
+                "pestana_pnl": {"type": "string", "description": "En qué pestaña del PNL quedó también registrado, si ya lo hiciste"},
+                "notas":       {"type": "string"}
+            },
+            "required": ["tipo", "monto", "concepto", "pedido"]
+        }
+    },
+    {
+        "name": "leer_movimientos",
+        "description": (
+            "La plata de un pedido: cuánto se cobró, cuánto se gastó y qué margen real "
+            "dejó, contrastado con lo que se cotizó. Para '¿cuánto me dejó el pedido de "
+            "X?', '¿cuánto llevo gastado en X?', '¿ya me pagaron todo?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pedido":  {"type": "string", "description": "Cliente o pedido. Vacío = todos"},
+                "resumen": {"type": "boolean", "description": "true = solo el balance, sin el detalle"}
+            }
         }
     },
     {
@@ -825,14 +922,23 @@ es una experiencia armada en la página. Las experiencias NO se costean (el prec
 persona lo pone Camilo): solo confirma los datos y mándala con enviar_cotizacion_pottery.
 No la guardes en el Cotizador Interno — esa hoja es de productos.
 
-PEGADO DESDE LA PÁGINA: si el mensaje empieza con "COTIZACIÓN BOSQUE Y CIELO", es una cotización
-armada allá que Camilo quiere en el Cotizador Interno. La página guarda en su propia base,
-no en el Sheet: escribirla es tu trabajo. Lee las referencias con sus datos (cantidad,
-tamaño, acabado, minutos_acabado y los costos que traiga cada una), pásalas tal cual como
-`lineas` y `condiciones` a guardar_hoja_cotizacion con ese mismo número, y responde
-confirmando en qué pestaña quedó. Si el total que calculas no coincide con el que trae el
-texto, DILO con los dos valores en vez de corregirlo callado: significa que la página y la
-hoja tienen parámetros distintos.
+PEGADO DESDE LA PÁGINA: si el mensaje empieza con "COTIZACIÓN BOSQUE Y CIELO", es una
+cotización armada allá. La página guarda en su propia base, no en el Sheet ni en HubSpot:
+registrarla es tu trabajo, y se hace con **registrar_cotizacion** — una sola llamada que
+la deja en los tres sitios (pestaña Cotizaciones, HubSpot con negocio y ticket, y el
+desglose en el Cotizador Interno si le pasas `lineas`).
+
+Lee del texto: el número, el cliente y su contacto, el total, las piezas y las referencias
+con sus datos (cantidad, tamaño, acabado, minutos_acabado y los costos de cada una).
+Pásalas tal cual como `lineas` y `condiciones`. Después reporta las tres líneas que
+devuelve, sin esconder las que fallen.
+
+NUNCA digas que "quedó registrado acá" sin haber llamado a registrar_cotizacion: el chat
+no es un registro. Si el Cotizador Interno falla por permisos, los otros dos igual
+quedaron — dilo así y sigue.
+
+Si el total que calculas no coincide con el que trae el texto, DILO con los dos valores en
+vez de corregirlo callado: significa que la página y la hoja tienen parámetros distintos.
 
 TAMAÑO: si no lo dicen, dedúcelo del tipo de pieza y AVISA qué asumiste
 ("asumí tamaño M, una taza estándar"). XS/S piezas pequeñas · M taza o plato de 27cm ·
@@ -957,6 +1063,29 @@ Cuando una etapa ya tenga 3 o más jornadas, propónselo a Camilo: "el acabado d
 M va en 23 min medidos en 5 jornadas, ¿lo cargo como estándar?" y con su sí llama
 guardar_tiempo_estandar. Eso reemplaza el dato de respaldo y el precio deja de ser un
 estimado.
+
+────────────────────────────────────────
+LA PLATA DE CADA PEDIDO
+────────────────────────────────────────
+Las pestañas de ingresos y egresos van por LÍNEA DE NEGOCIO (Shop, B2B, Pottery Lab) y
+por CATEGORÍA de gasto (Materia Prima, Mano de Obra). Sirven para el PNL, pero ninguna
+dice a qué pedido pertenece la plata. La pestaña Movimientos es esa dimensión que falta.
+
+"el cliente X pagó el anticipo de $300.000" | "compré los bizcochos del pedido de X"
+→ registrar_movimiento(tipo, monto, concepto, pedido, categoria)
+
+"¿cuánto me dejó el pedido de X?" | "¿ya me pagaron todo?" | "¿cuánto llevo gastado en X?"
+→ leer_movimientos(pedido) · compara contra lo cotizado y da el margen REAL
+
+REGLAS:
+- Solo va acá lo atribuible a un pedido. Arriendo, servicios y nómina del mes NO tienen
+  pedido: esos siguen yendo a su pestaña de siempre con agregar_fila.
+- Un movimiento de pedido normalmente va en DOS sitios: acá (para el margen del pedido)
+  y en su pestaña del PNL (para el mes). Si ya lo registraste en el PNL, pasa
+  `pestana_pnl` para que quede la traza y no vuelva a avisar.
+- El margen sobre lo cotizado es el número que importa: dice si el cotizador está
+  acertando. Si el margen real sale muy por debajo del que prometía la cotización,
+  DILO — significa que hay costos que el modelo no está viendo.
 
 ────────────────────────────────────────
 MÓDULO FLUJO DE CAJA
@@ -1110,6 +1239,12 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         if not resultado.startswith("Error"):
                             resultado += "\n" + registrar_cotizacion_hs(
                                 datos, paquete, inp.get("deal_id", ""))
+                            resultado += "\n" + _reg_cot_fila(
+                                paquete["numero"], cliente=datos["cliente"]["nombre"],
+                                empresa=datos["cliente"].get("empresa", ""),
+                                contacto=datos["cliente"].get("email", "") or datos["cliente"].get("telefono", ""),
+                                tipo="producto", total=int(paquete["total"]),
+                                fecha=datos.get("fecha", ""), notas=datos.get("notas", ""))
                     elif name == "enviar_cotizacion_pottery":
                         datos = {
                             "cliente": {
@@ -1137,6 +1272,14 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         if not resultado.startswith("Error"):
                             resultado += "\n" + registrar_cotizacion_hs(
                                 datos, paquete, inp.get("deal_id", ""))
+                            resultado += "\n" + _reg_cot_fila(
+                                paquete["numero"], cliente=datos["cliente"]["nombre"],
+                                empresa=datos["cliente"].get("empresa", ""),
+                                contacto=datos["cliente"].get("email", "") or datos["cliente"].get("telefono", ""),
+                                tipo="pottery",
+                                piezas=int(inp.get("taller_participantes", 0) or 0),
+                                total=int(paquete["total"]),
+                                fecha=datos.get("fecha", ""), notas=datos.get("notas", ""))
                     # ── Cotizador ───────────────────────────────────────────
                     elif name == "calcular_precio":
                         try:
@@ -1176,6 +1319,22 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                                 resultado = _cot_guardar_hoja(_r, inp.get("numero", ""))
                         except ValueError as e:
                             resultado = f"No se pudo guardar la hoja: {e}"
+                    elif name == "registrar_cotizacion":
+                        resultado = _registrar_cotizacion(inp)
+                    elif name == "leer_cotizaciones":
+                        resultado = _reg_cot_leer(inp.get("cliente", ""))
+                    elif name == "marcar_cotizacion":
+                        resultado = _reg_cot_estado(inp["numero"], inp["estado"])
+                    elif name == "registrar_movimiento":
+                        resultado = _mov_registrar(
+                            inp["tipo"], inp["monto"], inp["concepto"], inp["pedido"],
+                            inp.get("categoria", ""), inp.get("fecha", ""),
+                            inp.get("forma_pago", ""), inp.get("pestana_pnl", ""),
+                            inp.get("notas", ""))
+                    elif name == "leer_movimientos":
+                        resultado = (_mov_resumen(inp["pedido"])
+                                     if inp.get("resumen") and inp.get("pedido")
+                                     else _mov_leer(inp.get("pedido", "")))
                     elif name == "guardar_tiempo_estandar":
                         resultado = _cot_guardar_tiempo(
                             inp["etapa"], inp["tamano"], inp["dificultad"], inp["minutos"])
@@ -1637,6 +1796,53 @@ def _jornada_registrar(inp):
 
 PROD_CABECERA = ["#", "Cliente", "Descripción", "Deal ID", "Proceso", "Inicio",
                  "Entrega", "Etapa", "Actualizado", "Notas"]
+
+
+def _registrar_cotizacion(inp):
+    """Una cotización va a TRES sitios y ninguno puede tumbar a los otros.
+
+    Antes el pegado desde la página solo intentaba el Cotizador Interno, que
+    está bloqueado por permisos: si eso fallaba, la cotización no quedaba
+    registrada en ninguna parte."""
+    numero = str(inp.get("numero", "")).strip()
+    if not numero:
+        return "❌ Falta el número de la cotización."
+    total  = int(inp.get("total", 0) or 0)
+    piezas = int(inp.get("piezas", 0) or 0)
+    tipo   = inp.get("tipo", "producto")
+    nombre = inp.get("cliente_nombre", "")
+    empresa = inp.get("cliente_empresa", "")
+    fecha  = inp.get("fecha", "") or datetime.now().strftime("%d/%m/%Y")
+    partes = []
+
+    # 1. Registro de operación — es el que siempre funciona
+    partes.append(_reg_cot_fila(
+        numero, cliente=nombre, empresa=empresa,
+        contacto=inp.get("cliente_email", "") or inp.get("cliente_telefono", ""),
+        tipo=tipo, piezas=piezas, total=total, fecha=fecha,
+        notas=inp.get("notas", "")))
+
+    # 2. HubSpot — contacto, negocio, ticket y nota
+    datos = {"cliente": {"nombre": nombre, "empresa": empresa,
+                         "email": inp.get("cliente_email", ""),
+                         "telefono": inp.get("cliente_telefono", "")},
+             "fecha": fecha, "notas": inp.get("notas", "")}
+    paquete = {"numero": numero, "total": total, "empresa": empresa,
+               "etiqueta": "Pottery Lab" if tipo == "pottery" else "Productos",
+               "detalle": inp.get("detalle", "")}
+    partes.append(registrar_cotizacion_hs(datos, paquete, inp.get("deal_id", "")))
+
+    # 3. Cotizador Interno — el desglose. Puede fallar por permisos sin arrastrar
+    #    a los dos anteriores.
+    if inp.get("lineas"):
+        try:
+            _r = _cotizar_pedido(inp["lineas"], inp.get("condiciones"),
+                                 cliente=nombre or empresa)
+            partes.append(_cot_guardar_hoja_pedido(_r, numero))
+        except Exception as e:
+            partes.append(f"⚠️ Sin desglose en el Cotizador Interno: {e}")
+
+    return "\n".join(str(x) for x in partes if x)
 
 
 def _prod_asegurar():
