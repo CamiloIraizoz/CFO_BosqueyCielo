@@ -262,3 +262,23 @@ def bitacora(dias=7, pedido=""):
     lineas.append("")
     lineas.append(f"Total: {int(total_piezas)} piezas · {round(total_min / 60, 1)} horas de taller.")
     return "\n".join(lineas)
+
+
+def avance_pedido(pedido):
+    """Cuántas piezas de ese pedido pasaron por cada tarea, según las jornadas."""
+    if not str(pedido or "").strip():
+        return ""
+    clave = pedido.strip().lower()
+    por_tarea = {}
+    for f in _filas():
+        if clave not in str(f[2]).strip().lower():
+            continue
+        piezas = _num(f[7])
+        if not piezas:
+            continue
+        tarea = str(f[3]).strip().lower() or "trabajo"
+        por_tarea[tarea] = por_tarea.get(tarea, 0) + piezas
+    if not por_tarea:
+        return ""
+    partes = [f"{int(n)} {t}" for t, n in sorted(por_tarea.items(), key=lambda x: -x[1])]
+    return " · ".join(partes)

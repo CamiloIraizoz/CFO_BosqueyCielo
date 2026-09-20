@@ -19,6 +19,8 @@
 
 ### Registro de aprendizajes
 
+- **2026-09-20 — Producción tiene una sola casa, y es Telegram:** el tablero salió de la página; pedidos, jornadas y pendientes viven en el Sheet y el bot es su única puerta. La página quedó como cotizador (Productos · Pottery Lab · Ajustes). **Por qué importa:** la página escribe en la base del artifact y el bot en Sheets — nunca van a verse entre sí, así que cualquier cosa que se ponga en las dos termina siendo dos listas que se contradicen. Antes de agregar una función a la página, preguntarse si el bot ya la tiene.
+
 - **2026-09-19 — La jornada del taller es la medición de tiempos:** cuando el equipo reporta "empecé a pintar a las 10:00, terminé a las 2:00, hice 10 platos", eso no es solo seguimiento: son **24 min/pieza de Acabado**, el dato exacto que al cotizador le falta. `execution/jornadas.py` lo guarda en la pestaña *Jornadas* y promedia **ponderando por piezas**. **Por qué importa:** deja de haber que "sacar tiempo para cronometrar" — el parte diario que igual iban a dar es la medición, y con 3 jornadas ya hay estándar.
 - **2026-09-19 — Una suscripción muda deja la pantalla vacía con la base llena:** Camilo agregó un proyecto, el `add()` funcionó (los 3 documentos están en la base) y la lista seguía diciendo "Todavía no hay proyectos": el `onSnapshot` de esa colección no entregó nada y no llamó al callback de error, así que no había nada que atrapar. Ahora cada colección se lee **por dos vías**: el `onSnapshot` para los cambios ajenos y un `get()` al conectar y después de cada escritura propia. **Por qué importa:** con capacidades, "no guardó" y "no se ve" son síntomas idénticos — lo primero es mirar la base con ArtifactData antes de tocar el código de guardado.
 

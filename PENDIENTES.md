@@ -129,24 +129,31 @@ resto sale solo. Falta que Camilo levante la lista con fotos y medidas.
 
 ---
 
+## Producción vive en Telegram (decidido el 2026-09-20)
+
+Camilo eligió la opción 1: **un solo almacén**. El tablero de producción salió de la
+página; la página quedó como cotizador (Productos · Pottery Lab · Ajustes).
+
+Todo lo de producción está en el Sheet *Ventas y Costos B&C*, y el bot es su única
+puerta:
+
+| Qué | Pestaña | Herramientas del bot |
+|---|---|---|
+| Pedidos y su etapa | `Producción` | `agregar_pedido_produccion` · `actualizar_etapa_produccion` · `leer_produccion` |
+| Parte diario del taller | `Jornadas` | `registrar_jornada` · `leer_jornadas` · `resumen_tiempos` |
+| Pendientes | `Pendientes` | `agregar_pendiente` · `leer_pendientes` · `cerrar_pendiente` |
+
+`leer_produccion` ya no devuelve la hoja pelada: le suma el avance que sale de las
+jornadas ("Camilo Rojas: 40 pintar platos · 150 empacar").
+
+**Quedó sin migrar:** los 3 proyectos que estaban en la base de la página (colección
+`proyectos`, todos del mismo pedido de Camilo Rojas — 150 platos con frases, entrega
+01/10/2026). No se borraron; siguen en la base del artifact por si hacen falta. Para
+llevarlo al Sheet basta registrarlo una vez por Telegram.
+
 ## Jornadas del taller (2026-09-19)
 
 Las dos personas que producen reportan por Telegram lo que hicieron en el día y de ahí
 salen los minutos por pieza. Ver `Directivas/cotizador.md`, sección *De dónde salen los
 tiempos*.
 
-**Lo que queda por decidir: producción tiene dos casas.**
-- Los **proyectos** viven en la base de la página (artifact), y la página es la única
-  que escribe ahí.
-- Las **jornadas** y la pestaña *Producción* viven en el Sheet, y el bot es el único
-  que escribe ahí (las credenciales de Google están en Railway).
-
-Mientras sean dos, lo que se anota en Telegram no aparece en la página y viceversa.
-Tres salidas, de menos a más trabajo:
-1. **Todo al Sheet** — la página deja de tener tablero de producción y pasa a ser solo
-   el cotizador. Lo más simple; Camilo mira el Sheet.
-2. **Todo a la página** — el equipo reporta desde el celular en la página en vez de
-   Telegram. Un solo almacén, pero cambia el hábito del taller.
-3. **Puente** — el bot sigue escribiendo al Sheet y una sincronización periódica copia
-   las jornadas a la base de la página. Es la única que mantiene las dos superficies,
-   y la más cara de sostener.

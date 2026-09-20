@@ -24,7 +24,8 @@ from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
 from competencia import barrer as _comp_barrer, guardar as _comp_guardar, resumen as _comp_resumen
 from jornadas import registrar as _jor_registrar, resumen as _jor_resumen, \
-    bitacora as _jor_bitacora
+    bitacora as _jor_bitacora, avance_pedido as _jor_avance
+from pendientes import agregar as _pend_agregar, leer as _pend_leer, cerrar as _pend_cerrar
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
     guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo, \
@@ -432,6 +433,44 @@ TOOLS = [
         }
     },
     {
+        "name": "agregar_pendiente",
+        "description": (
+            "Anota algo que hay que hacer y todavía no se hizo: comprar un material, "
+            "llamar a un proveedor, revisar una pieza. Llámalo cuando digan 'hay que...', "
+            "'recuérdame...', 'falta...'. Si es de un pedido en particular, pásalo."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pendiente": {"type": "string", "description": "Qué hay que hacer"},
+                "pedido":    {"type": "string", "description": "Cliente o pedido, si aplica"},
+                "quien":     {"type": "string", "description": "A quién le toca, si lo dicen"}
+            },
+            "required": ["pendiente"]
+        }
+    },
+    {
+        "name": "leer_pendientes",
+        "description": "Lista los pendientes abiertos. Para '¿qué falta?', '¿qué tengo pendiente?', '¿qué falta del pedido de X?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pedido": {"type": "string", "description": "Opcional: filtrar por cliente o pedido"}
+            }
+        }
+    },
+    {
+        "name": "cerrar_pendiente",
+        "description": "Marca un pendiente como hecho. Acepta el número (#3) o un pedazo del texto ('el esmalte').",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "referencia": {"type": "string", "description": "Número del pendiente o parte de su texto"}
+            },
+            "required": ["referencia"]
+        }
+    },
+    {
         "name": "leer_jornadas",
         "description": (
             "Muestra qué hizo el equipo en el taller los últimos días: quién, qué tarea, "
@@ -743,6 +782,9 @@ pocillo: si el usuario te lo dice, pásalo en esa línea en vez de cambiar el pa
 general. El parámetro general es el valor típico; el de la línea es la excepción.
 
 LA PÁGINA: Camilo y Daniela también cotizan desde https://claude.ai/artifact/7tLyDp5hwSXnQLY5rWbM5j
+La página es SOLO el cotizador (productos y Pottery Lab) y sus ajustes. Producción vive
+entera acá: pedidos, jornadas y pendientes. Si preguntan por el tablero de producción de
+la página, di que se movió a Telegram para no tener dos listas distintas.
 (la página de Bosque y Cielo). Usa la misma fórmula, así que los precios deben coincidir. Si alguien
 pregunta por "la página" o "el cotizador visual", es esa.
 
@@ -872,6 +914,10 @@ Qué hacer para que la medición sirva:
   es obvio; si no la dan, déjala vacía antes que inventarla.
 - Si además cerraron una etapa del pedido, pasa etapa_pedido para moverlo en Producción.
 - Una sola pregunta por mensaje. Si no saben o dicen "después", anota lo que haya y sigue.
+
+PENDIENTES: "hay que comprar esmalte" | "recuérdame llamar al proveedor" | "falta..."
+→ agregar_pendiente(pendiente, pedido, quien) · "¿qué falta?" → leer_pendientes()
+· "ya compré el esmalte" / "listo el #3" → cerrar_pendiente(referencia)
 
 "¿qué se hizo hoy?" | "¿cómo va el seguimiento?" | "¿en qué anda [cliente]?" → leer_jornadas()
 "¿cómo vamos con los tiempos?" | "¿cuánto nos demoramos pintando?" → resumen_tiempos()
@@ -1125,7 +1171,14 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                             inp["cliente"], inp["etapa"], inp.get("notas", "")
                         )
                     elif name == "leer_produccion":
-                        resultado = leer_sheet("Producción!A:J")
+                        resultado = _prod_leer()
+                    elif name == "agregar_pendiente":
+                        resultado = _pend_agregar(inp["pendiente"], inp.get("pedido", ""),
+                                                  inp.get("quien", ""))
+                    elif name == "leer_pendientes":
+                        resultado = _pend_leer(inp.get("pedido", ""))
+                    elif name == "cerrar_pendiente":
+                        resultado = _pend_cerrar(inp["referencia"])
                     elif name == "reporte_flujo_caja":
                         resultado = _generar_reporte_flujo()
                     elif name == "registrar_saldo_inicial":
@@ -1555,6 +1608,23 @@ def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", nota
     hoy = datetime.now().strftime("%d/%m/%Y")
     row = [num, cliente, descripcion, deal_id, proceso, hoy, fecha_entrega, etapa_inicial, hoy, notas]
     return agregar_fila("Producción!A:J", row)
+
+
+def _prod_leer():
+    """Los pedidos en producción, con el avance que sale de las jornadas."""
+    base = leer_sheet("Producción!A:J")
+    filas = leer_sheet_numericos("Producción!A:J")
+    extras = []
+    for fila in filas[1:]:
+        cliente = str(fila[1]).strip() if len(fila) > 1 else ""
+        if not cliente:
+            continue
+        avance = _jor_avance(cliente)
+        if avance:
+            extras.append(f"· {cliente}: {avance}")
+    if extras:
+        base += "\n\nAvance según las jornadas del taller:\n" + "\n".join(extras)
+    return base
 
 
 def _prod_actualizar(cliente, etapa, notas=""):
