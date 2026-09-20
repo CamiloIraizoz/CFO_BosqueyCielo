@@ -230,6 +230,11 @@
 
   .btn.chiquito { padding:8px 13px; font-size:13.5px; white-space:nowrap; }
 
+  .banda-sucio { position:sticky; top:0; z-index:20; background:#F6E3E2; color:var(--crit);
+                 border-radius:8px; padding:11px 14px; font-size:13.5px; margin-bottom:16px;
+                 border:1px solid rgba(0,0,0,.06); }
+  .banda-sucio b { font-weight:600; }
+  :root[data-theme="dark"] .banda-sucio, :root:not([data-theme="light"]) .banda-sucio { background:#3A2624; }
   .aviso-solo-lectura { background:var(--surface-2); border-radius:8px; padding:11px 14px;
                         font-size:13px; color:var(--muted); margin-bottom:16px; }
   .toast { position:fixed; left:50%; transform:translateX(-50%);
@@ -451,6 +456,10 @@
   <!-- ══ AJUSTES ════════════════════════════════════════ -->
   <section id="vista-ajustes" role="tabpanel" aria-labelledby="tab-ajustes" hidden>
     <div id="ajustes-lectura"></div>
+    <div class="banda-sucio" id="aviso-sucio" hidden>
+      Escribiste valores que <b>todavía no están guardados</b>. El cotizador sigue usando
+      los anteriores hasta que le des a «Guardar ajustes», al final de esta página.
+    </div>
 
     <div class="panel" style="margin-bottom:18px;">
       <h2>Producción se maneja por Telegram</h2>
@@ -887,6 +896,13 @@
       avisos.unshift({ texto:"Faltan tiempos medidos en varias referencias. Solo se está " +
                              "cobrando lo que sí está medido, así que el tiempo real por pieza " +
                              "es mayor." });
+    }
+
+    // Lo más confuso que puede pasar: Ajustes muestra un número que el precio
+    // no está usando, porque nunca se guardó.
+    if (ajustesSucios) {
+      avisos.unshift({ duro:true, texto:"Tienes cambios SIN GUARDAR en Ajustes: este precio " +
+                       "todavía no los usa. Vuelve a Ajustes y dale a «Guardar ajustes»." });
     }
 
     var volumen = Number(PARAMS.volumen_referencia) || 1;
@@ -1793,13 +1809,18 @@
     if (ajustesSucios) return;
     ajustesSucios = true;
     $("b-guardar-ajustes").textContent = "Guardar ajustes ·";
+    $("tab-ajustes").textContent = "Ajustes ·";
+    $("aviso-sucio").hidden = false;
     reportar("Tienes cambios sin guardar. Dale a «Guardar ajustes» o se pierden.",
              null, "a-reporte");
+    recalcular();   // que el cotizador también lo diga
   }
 
   function limpiarSucio() {
     ajustesSucios = false;
     $("b-guardar-ajustes").textContent = "Guardar ajustes";
+    $("tab-ajustes").textContent = "Ajustes";
+    $("aviso-sucio").hidden = true;
   }
 
   function pintarAjustes(forzar) {
@@ -1889,8 +1910,11 @@
 
   function leerMateriales() {
     Object.keys(refsMaterial).forEach(function (llave) {
-      var partes = llave.split("|");
-      MATERIAL_TAMANO[partes[0]][partes[1]] = refsMaterial[llave].value;
+      var partes = llave.split("|"), v = refsMaterial[llave].value;
+      // Guardarlo como texto hacía que "4500" viajara a la base como cadena y
+      // que un campo vacío quedara como "" en vez de desaparecer.
+      if (limpio(v) === "") delete MATERIAL_TAMANO[partes[0]][partes[1]];
+      else MATERIAL_TAMANO[partes[0]][partes[1]] = numero(v, 0);
     });
   }
 
