@@ -122,7 +122,7 @@ def registrar(persona, tarea, piezas, hora_inicio="", hora_fin="", minutos=None,
             (dificultad or "").lower(), piezas, hora_inicio, hora_fin,
             minutos, por_pieza, notas]
     r = agregar_fila(f"'{PESTANA}'!A:M", fila)
-    if str(r).startswith("❌"):
+    if str(r).startswith(("Error", "❌")):
         return r
 
     horas = int(minutos // 60)

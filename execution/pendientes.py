@@ -36,7 +36,7 @@ def agregar(texto, pedido="", quien=""):
     num = len(_filas()) + 1
     fila = [num, datetime.now().strftime("%d/%m/%Y"), pedido, texto.strip(), quien, "abierto", ""]
     r = agregar_fila(f"'{PESTANA}'!A:G", fila)
-    if str(r).startswith("❌"):
+    if str(r).startswith(("Error", "❌")):
         return r
     destino = f" ({pedido})" if pedido else ""
     de = f" — {quien}" if quien else ""

@@ -364,7 +364,7 @@ def guardar_tiempo(etapa: str, tamano: str, dificultad: str, minutos: float) -> 
         escritura = escribir_rango(_rango(PESTANA_TIEMPOS, f"{columna}{destino}"),
                                    [[float(minutos)]], sheet_id=COTIZADOR_SHEET_ID)
         if escritura.startswith("Error"):
-            return f"❌ No se pudo guardar: {escritura}"
+            return f"❌ No se pudo guardar: {_motivo(escritura)}"
         return f"✅ Guardado: {etapa} · {tamano} · {dificultad} = {minutos} min"
     except Exception as e:
         return f"❌ No se pudo guardar el tiempo: {e}"
@@ -394,7 +394,7 @@ def guardar_parametro(clave: str, valor) -> str:
         escritura = escribir_rango(_rango(PESTANA_PARAMS, f"B{fila_destino}"), [[valor]],
                                    sheet_id=COTIZADOR_SHEET_ID)
         if escritura.startswith("Error"):
-            return f"❌ No se pudo guardar {clave}: {escritura}"
+            return f"❌ No se pudo guardar {clave}: {_motivo(escritura)}"
         return f"✅ Guardado: {clave} = {valor}"
     except Exception as e:
         return f"No se pudo guardar {clave}: {e}"
@@ -808,7 +808,7 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
     pestana = _nombre_pestana(r, numero)
     respuesta = crear_pestana(pestana, sheet_id=COTIZACIONES_SHEET_ID)
     if respuesta.startswith("Error"):
-        return f"❌ No se pudo crear la hoja: {_explicar_403(respuesta)}"
+        return f"❌ No se pudo crear la hoja: {_motivo(_explicar_403(respuesta))}"
 
     p = r.get("params_usados", {})
     filas = [
@@ -859,7 +859,7 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
     escritura = escribir_rango(_rango(pestana, f"A1:C{len(filas)}"), filas,
                                sheet_id=COTIZACIONES_SHEET_ID)
     if escritura.startswith("Error"):
-        return f"❌ No se pudo escribir la hoja: {escritura}"
+        return f"❌ No se pudo escribir la hoja: {_motivo(escritura)}"
 
     # Índice, para verlas todas de un vistazo
     if "creada" in crear_pestana(PESTANA_INDICE, sheet_id=COTIZACIONES_SHEET_ID):
@@ -873,6 +873,12 @@ def guardar_hoja_cotizacion(r: dict, numero: str = "") -> str:
                  sheet_id=COTIZACIONES_SHEET_ID)
 
     return f"📄 Detalle guardado en la pestaña '{pestana}' del Cotizador Interno."
+
+
+def _motivo(respuesta: str) -> str:
+    """El texto de sheets ya viene explicado; solo sobra el prefijo técnico."""
+    texto = str(respuesta)
+    return texto[7:] if texto.startswith("Error: ") else texto
 
 
 def _explicar_403(mensaje: str) -> str:
@@ -903,7 +909,7 @@ def guardar_hoja_pedido(r: dict, numero: str = "") -> str:
     pestana = _nombre_pestana(etiqueta, numero)
     respuesta = crear_pestana(pestana, sheet_id=COTIZACIONES_SHEET_ID)
     if respuesta.startswith("Error"):
-        return f"❌ No se pudo crear la hoja: {_explicar_403(respuesta)}"
+        return f"❌ No se pudo crear la hoja: {_motivo(_explicar_403(respuesta))}"
 
     filas = [
         [f"COTIZACIÓN — {r.get('cliente') or 'Interna'}", "", "", "", "", "", ""],
@@ -941,7 +947,7 @@ def guardar_hoja_pedido(r: dict, numero: str = "") -> str:
     escritura = escribir_rango(_rango(pestana, f"A1:G{len(filas)}"), filas,
                                sheet_id=COTIZACIONES_SHEET_ID)
     if escritura.startswith("Error"):
-        return f"❌ No se pudo escribir la hoja: {escritura}"
+        return f"❌ No se pudo escribir la hoja: {_motivo(escritura)}"
 
     if "creada" in crear_pestana(PESTANA_INDICE, sheet_id=COTIZACIONES_SHEET_ID):
         escribir_rango(_rango(PESTANA_INDICE, "A1:H1"),

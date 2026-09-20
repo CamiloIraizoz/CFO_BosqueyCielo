@@ -18,7 +18,8 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path, override=False)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas, leer_sheet_numericos
+from sheets import leer_sheet, agregar_fila, actualizar_celda, listar_pestanas, leer_sheet_numericos, \
+    crear_pestana, escribir_rango
 from hubspot import buscar_contacto, crear_contacto, crear_deal, actualizar_deal, listar_deals, agregar_nota, \
     registrar_cotizacion as registrar_cotizacion_hs
 from email_sender import enviar_cotizacion, enviar_cotizacion_pottery, preparar_cotizacion
@@ -96,6 +97,22 @@ TOOLS = [
                 "valor": {"type": "string", "description": "Nuevo valor"}
             },
             "required": ["rango", "valor"]
+        }
+    },
+    {
+        "name": "crear_pestana",
+        "description": (
+            "Crea una pestaña nueva en el Sheet de operación (Ventas y Costos B&C). "
+            "Úsala cuando una escritura falle porque la pestaña no existe. NUNCA le "
+            "pidas al usuario que la cree a mano: puedes hacerlo tú, y pedírselo lo "
+            "manda a crearla en el archivo equivocado."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "titulo": {"type": "string", "description": "Nombre exacto de la pestaña"}
+            },
+            "required": ["titulo"]
         }
     },
     {
@@ -692,6 +709,21 @@ PNL: leer_sheet("Resumen!A1:N50"). Filas 20/39/49=márgenes%. Nunca inventes cif
 
 CONTEXTO: COP. Quien usa este bot es Camilo (dueño/CFO). Daniela=gerente operativa, Jessica=talleres, Andrea=Ceramikids, Don Jair=mantenimiento. Amphoras=estudiantes.
 
+DOS ARCHIVOS DE SHEETS, y confundirlos es el error más fácil del proyecto:
+· *Ventas y Costos B&C* — la operación. Producción, Jornadas, Pendientes, Cartera,
+  Competencia, flujo de caja. Es donde escriben leer_sheet/agregar_fila/crear_pestana
+  y TODAS las herramientas de producción.
+· *Cotizador Interno* — el modelo de costos. Parámetros Cotizador, Tiempos Estándar y
+  las hojas de cada cotización. Solo lo tocan guardar_parametro_cotizador,
+  guardar_tiempo_estandar y guardar_hoja_cotizacion.
+
+Si una escritura falla porque falta una pestaña, **créala tú** con crear_pestana. Nunca
+le pidas a Camilo que la cree a mano: termina creándola en el archivo equivocado y el
+bot sigue sin encontrarla.
+Si una escritura falla por permisos (403), es que *Cotizador Interno* no está compartido
+con la cuenta de servicio del bot. Dile el correo exacto que trae el error y sigue: el
+cálculo se puede correr igual pasando los valores a mano, solo que no quedan guardados.
+
 ────────────────────────────────────────
 MÓDULO HUBSPOT — PIPELINE B2B
 ────────────────────────────────────────
@@ -1031,6 +1063,8 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                         resultado = agregar_fila(inp["rango"], inp["valores"])
                     elif name == "actualizar_celda":
                         resultado = actualizar_celda(inp["rango"], inp["valor"])
+                    elif name == "crear_pestana":
+                        resultado = crear_pestana(inp["titulo"])
                     elif name == "listar_pestanas":
                         resultado = listar_pestanas()
                     # ── HubSpot ──────────────────────────────────────────────
@@ -1601,7 +1635,27 @@ def _jornada_registrar(inp):
     return salida
 
 
+PROD_CABECERA = ["#", "Cliente", "Descripción", "Deal ID", "Proceso", "Inicio",
+                 "Entrega", "Etapa", "Actualizado", "Notas"]
+
+
+def _prod_asegurar():
+    """La pestaña se crea sola la primera vez. Pedírsela al usuario es mandarlo a
+    hacer trabajo manual que el bot puede hacer — y a equivocarse de archivo, que
+    es lo que pasó el 2026-09-20."""
+    if leer_sheet_numericos("Producción!A1:J1"):
+        return ""
+    r = crear_pestana("Producción")
+    if str(r).startswith("Error") or str(r).startswith("❌"):
+        return str(r)
+    escribir_rango("Producción!A1:J1", [PROD_CABECERA])
+    return ""
+
+
 def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", notas=""):
+    fallo = _prod_asegurar()
+    if fallo:
+        return "❌ No pude crear la pestaña Producción: " + fallo
     filas = leer_sheet_numericos("Producción!A:A")
     num = max(len(filas), 1)
     etapa_inicial = "modelado" if int(proceso) == 1 else "esmaltado inicial"

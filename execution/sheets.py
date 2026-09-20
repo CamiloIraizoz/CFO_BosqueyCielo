@@ -9,6 +9,10 @@ from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
+# El proyecto tiene DOS archivos de Sheets y confundirlos es el error más fácil:
+# la operación diaria vive en uno y el modelo de costos en el otro.
+COTIZADOR_SHEET_ID = os.getenv(
+    "COTIZADOR_SHEET_ID", "1SRji5gNT85HPLOXBgUhQdIRG7WZvTTWx6eDPEu6exKE")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 _service_cache = None
@@ -45,6 +49,44 @@ def correo_servicio() -> str:
         return ""
 
 
+def nombre_hoja(sheet_id: str = "") -> str:
+    """Cuál de los dos archivos es, para poder nombrarlo en los errores."""
+    sid = sheet_id or SPREADSHEET_ID
+    if sid == COTIZADOR_SHEET_ID:
+        return "Cotizador Interno"
+    if sid == SPREADSHEET_ID:
+        return "Ventas y Costos B&C"
+    return "el Sheet"
+
+
+def explicar(error, rango: str = "", sheet_id: str = "") -> str:
+    """Traduce un error de la API a algo que se pueda arreglar.
+
+    Los dos que se repiten son siempre los mismos y los dos se ven igual de
+    opacos: la hoja no está compartida con el bot, o la pestaña no existe en
+    ESE archivo (casi siempre porque se creó en el otro). En el segundo caso
+    lo más útil es listar las pestañas que sí hay."""
+    texto = str(error)
+    cual = nombre_hoja(sheet_id)
+    bajo = texto.lower()
+
+    if "403" in texto or "permission" in bajo or "caller does not have" in bajo:
+        correo = correo_servicio()
+        if correo:
+            return (f"El bot no tiene permiso de escritura en *{cual}*. "
+                    f"Compártelo como Editor con {correo}.")
+        return f"El bot no tiene permiso de escritura en *{cual}*."
+
+    if "unable to parse range" in bajo or "not found" in bajo:
+        pestana = rango.split("!")[0].strip("'") if "!" in rango else rango
+        hay = listar_pestanas(sheet_id)
+        extra = f" Las que sí hay: {hay}." if hay and not hay.startswith("Error") else ""
+        return (f"No existe la pestaña *{pestana}* en *{cual}*.{extra} "
+                f"Ojo: el proyecto tiene dos archivos de Sheets y puede estar creada en el otro.")
+
+    return f"Error en {cual}: {texto}"
+
+
 def leer_sheet(rango: str, sheet_id: str = "") -> str:
     try:
         result = _service().spreadsheets().values().get(
@@ -71,7 +113,7 @@ def agregar_fila(rango: str, valores: list, sheet_id: str = "") -> str:
         ).execute()
         return "Fila agregada correctamente."
     except Exception as e:
-        return f"Error: {e}"
+        return "Error: " + explicar(e, rango, sheet_id)
 
 
 def actualizar_celda(rango: str, valor: str) -> str:
@@ -84,7 +126,7 @@ def actualizar_celda(rango: str, valor: str) -> str:
         ).execute()
         return f"Celda {rango} actualizada a '{valor}'."
     except Exception as e:
-        return f"Error: {e}"
+        return "Error: " + explicar(e, rango)
 
 
 def listar_pestanas(sheet_id: str = "") -> str:
@@ -135,4 +177,4 @@ def escribir_rango(rango: str, filas: list, sheet_id: str = "") -> str:
         ).execute()
         return f"{len(filas)} filas escritas en {rango}."
     except Exception as e:
-        return f"Error: {e}"
+        return "Error: " + explicar(e, rango, sheet_id)
