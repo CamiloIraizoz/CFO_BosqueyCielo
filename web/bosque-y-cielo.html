@@ -1981,47 +1981,115 @@
     });
   }
 
+  // Una promesa de capacidad puede quedarse pendiente para siempre — ni resuelve
+  // ni rechaza — y entonces la página se calla. Todo lo que dependa de la base
+  // corre contra un plazo.
+  function conPlazo(promesa, ms, codigo) {
+    return Promise.race([
+      promesa,
+      new Promise(function (_, rechazar) {
+        setTimeout(function () { rechazar({ code:codigo || "sin_respuesta" }); }, ms);
+      })
+    ]);
+  }
+
+  function motivo(e) {
+    if (!e) return "no dijo por qué";
+    if (e.code === "sin_respuesta") return "la base no respondió";
+    if (e.code === "invalid_argument") return "la base rechazó el dato (invalid_argument)";
+    if (e.code) return e.code;
+    return (e.message || String(e));
+  }
+
+  // Guarda un documento y COMPRUEBA leyéndolo de vuelta. Que el set() resuelva
+  // no basta: lo que importa es que el dato haya quedado.
+  function guardarDoc(d, nombre, ruta, cuerpo) {
+    return conPlazo(Promise.resolve(d.doc(ruta).set(cuerpo)), 15000)
+      .then(function () { return conPlazo(Promise.resolve(d.doc(ruta).get()), 15000); })
+      .then(function (snap) {
+        if (snap && snap.exists) return null;
+        return nombre + " (se escribió pero no quedó en la base)";
+      })
+      .catch(function (e) { return nombre + " (" + motivo(e) + ")"; });
+  }
+
   function guardarAjustes() {
-    Object.keys(refsParams).forEach(function (clave) {
-      var v = refsParams[clave].value;
-      if (limpio(v) !== "") PARAMS[clave] = numero(v, PARAMS[clave]);
-    });
-    Object.keys(refsTiempos).forEach(function (llave) {
-      var partes = llave.split("|"), v = refsTiempos[llave].value;
-      if (!TIEMPOS[partes[0]][partes[1]]) TIEMPOS[partes[0]][partes[1]] = {};
-      if (limpio(v) === "") delete TIEMPOS[partes[0]][partes[1]][partes[2]];
-      else TIEMPOS[partes[0]][partes[1]][partes[2]] = numero(v, 0);
-    });
-    leerHorno();
-    leerMateriales();
-    recalcular();
+    // Si algo revienta acá, antes se salía sin decir nada y el botón parecía muerto.
+    try {
+      Object.keys(refsParams).forEach(function (clave) {
+        var v = refsParams[clave].value;
+        if (limpio(v) !== "") PARAMS[clave] = numero(v, PARAMS[clave]);
+      });
+      Object.keys(refsTiempos).forEach(function (llave) {
+        var partes = llave.split("|"), v = refsTiempos[llave].value;
+        if (!TIEMPOS[partes[0]][partes[1]]) TIEMPOS[partes[0]][partes[1]] = {};
+        if (limpio(v) === "") delete TIEMPOS[partes[0]][partes[1]][partes[2]];
+        else TIEMPOS[partes[0]][partes[1]][partes[2]] = numero(v, 0);
+      });
+      leerHorno();
+      leerMateriales();
+      recalcular();
+    } catch (e) {
+      reportar("No se pudo preparar el guardado: " + motivo(e) + ". No se guardó nada.",
+               "mal", "a-reporte");
+      toast("No se pudo guardar — mira el aviso en Ajustes");
+      return;
+    }
 
     var copiaParams = {};
     Object.keys(PARAMS).forEach(function (k) { copiaParams[k] = PARAMS[k]; });
-    pedir("db").then(function (d) {
+
+    var partes;
+    try {
+      partes = [
+        ["los parámetros", "config/parametros", copiaParams],
+        ["los tiempos", "config/tiempos", JSON.parse(JSON.stringify(TIEMPOS))],
+        ["el horno", "config/horno", JSON.parse(JSON.stringify(HORNO))],
+        ["los materiales", "config/materiales", JSON.parse(JSON.stringify(MATERIAL_TAMANO))]
+      ];
+    } catch (e) {
+      reportar("No se pudo preparar el guardado: " + motivo(e) + ". No se guardó nada.",
+               "mal", "a-reporte");
+      return;
+    }
+
+    reportar("Guardando…", null, "a-reporte");
+    $("b-guardar-ajustes").disabled = true;
+
+    // Cada documento va por su cuenta: que falle uno no puede tumbar a los otros,
+    // y hay que poder decir CUÁL falló.
+    conPlazo(pedir("db"), 13000).then(function (d) {
       if (!d) {
-        limpiarSucio();
-        reportar("Guardado solo en esta pantalla: no hay conexión con la base.",
+        reportar("No hay conexión con la base: lo que escribiste sigue en pantalla, " +
+                 "pero NO quedó guardado. Recarga la página e inténtalo de nuevo.",
                  "mal", "a-reporte");
-        return;
+        return null;
       }
       db = d;
-      return Promise.all([
-        d.doc("config/parametros").set(copiaParams),
-        d.doc("config/tiempos").set(JSON.parse(JSON.stringify(TIEMPOS))),
-        d.doc("config/horno").set(JSON.parse(JSON.stringify(HORNO))),
-        d.doc("config/materiales").set(JSON.parse(JSON.stringify(MATERIAL_TAMANO)))
-      ]).then(function () {
+      return Promise.all(partes.map(function (par) {
+        return guardarDoc(d, par[0], par[1], par[2]);
+      }));
+    }).then(function (resultados) {
+      $("b-guardar-ajustes").disabled = puedeEscribir === false;
+      if (!resultados) return;
+      var fallos = resultados.filter(function (x) { return x; });
+      if (!fallos.length) {
         limpiarSucio();
-        reportar("Guardado. Si cambiaste un costo, cuéntaselo también al bot.",
-                 null, "a-reporte");
+        reportar("Guardado y verificado en la base. Si cambiaste un costo, " +
+                 "cuéntaselo también al bot.", null, "a-reporte");
         toast("Ajustes guardados");
-      }).catch(function (e) {
-        if (e && e.code === "invalid_argument") {
-          puedeEscribir = false; pintarAjustes();
-          toast("No tienes permiso para cambiar los ajustes");
-        } else { toast("No se pudieron guardar los ajustes"); }
-      });
+        return;
+      }
+      // Sigue sucio a propósito: todavía hay algo que no quedó.
+      reportar("No quedó guardado: " + fallos.join(" · ") +
+               ". Lo demás sí. Vuelve a darle a «Guardar ajustes».", "mal", "a-reporte");
+      toast("No se guardó todo — mira el aviso");
+    }).catch(function (e) {
+      $("b-guardar-ajustes").disabled = puedeEscribir === false;
+      reportar("No se pudo guardar: " + motivo(e) +
+               ". Lo que escribiste sigue en pantalla, pero no está en la base.",
+               "mal", "a-reporte");
+      toast("No se pudo guardar — mira el aviso en Ajustes");
     });
   }
 
