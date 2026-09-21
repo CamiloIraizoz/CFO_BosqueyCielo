@@ -160,48 +160,28 @@ tiempos*.
 
 ---
 
-## Seguimiento de producción: la pensada pendiente (2026-09-20)
+## Seguimiento de producción: resuelto (2026-09-21)
 
-Hoy hay tres piezas sueltas y una pregunta de fondo sin responder.
+Camilo decidió que **la etapa se deduce de las jornadas** y que moverla a mano queda solo
+para corregir (`execution/avance.py`).
 
-**Lo que ya existe**
-- `Producción` — un renglón por pedido, con UNA etapa. Se mueve a mano.
-- `Jornadas` — quién hizo qué, cuántas piezas, cuántos minutos.
-- `Pendientes` — lo que falta hacer.
-- El avance por piezas, que `leer_produccion` deduce de las jornadas.
+- Un pedido pasa de etapa cuando las piezas reportadas en esa etapa alcanzan la cantidad
+  del pedido. Por eso `agregar_pedido_produccion` ahora **exige las piezas** (columna K de
+  la pestaña Producción) y el bot las pregunta.
+- **La deducción solo avanza.** Una jornada vieja nunca deshace una corrección a mano, ni
+  en el recálculo ni en el tablero.
+- `leer_produccion` muestra: etapa, cuántas piezas van de cuántas, y **cuántas horas de
+  taller faltan** para cerrar la etapa en curso, al ritmo medido en las jornadas de ESE
+  pedido y a 12 h/día (2 personas × 6 h). Si la proyección se pasa de la fecha de entrega,
+  el bot lo dice sin que le pregunten.
+- El ritmo se toma **de la etapa en curso**, no del promedio del pedido: si esmaltar va a
+  6 min/pieza y pintar a 24, el promedio (11) subestimaría el pintado a menos de la mitad.
+- "Lo metí al horno" solo se asigna a una quema cuando el proceso tiene **una sola**. En
+  el clásico hay dos y es ambiguo: mejor no adivinar y que el bot pregunte.
 
-**La pregunta de fondo: ¿el pedido está EN una etapa, o tiene piezas en varias?**
-
-Hoy el modelo dice que un pedido de 150 platos "está en pintar bizcocho". Pero en el
-taller real hay 40 pintados, 30 en el horno y 80 sin tocar. Una sola etapa por pedido no
-puede representar eso, y por eso la etapa hay que moverla a mano — es una opinión, no un
-dato.
-
-**Propuesta: el estado se deduce, no se declara.** Las jornadas ya dicen cuántas piezas
-pasaron por cada tarea. Si 150 de 150 están pintadas, el pedido pasó esa etapa solo. La
-etapa deja de ser un campo que alguien actualiza y pasa a ser el resultado de lo que el
-taller reportó. `actualizar_etapa_produccion` quedaría solo para corregir.
-
-Lo que eso desbloquea, en orden de valor:
-
-1. **¿Llegamos a la fecha?** Con los minutos por pieza medidos y las piezas que faltan,
-   sale cuántas horas de taller quedan. Contra las horas disponibles de las dos personas,
-   sale una fecha real que se puede comparar con la prometida. Es la alerta que más
-   plata salva.
-2. **El horno como tope.** `HORNO.capacidad` ya está en la página (60 XS · 40 S · 25 M ·
-   10 L · 2 XL). 150 platos M son 6 hornadas; a 12h de quema + 18h de enfriamiento son
-   ~7 días solo de horno. Eso debería salir al cotizar, no al entregar.
-3. **Dónde se atasca.** Con jornadas acumuladas se ve qué etapa se come las horas.
-4. **Avisos sin preguntar.** Pedido sin movimiento en X días; entrega cerca con piezas
-   pendientes.
-
-**Lo que falta decidir con Camilo**
-- ¿Las dos personas del taller trabajan sobre pedidos identificados, o hacen lotes que
-  mezclan pedidos? Si mezclan, la jornada necesita repartir las piezas entre pedidos.
-- ¿Cuántas horas al día pone cada una? Sin eso no hay proyección de fecha.
-- ¿La etapa deducida reemplaza a la manual, o conviven?
-
----
+**Lo que sigue sin resolver:** las etapas que no son trabajo por pieza. Una quema son 12 h
+más 18 h de enfriamiento por hornada, y eso no se acelera con más gente — la proyección de
+horas de taller no lo tiene en cuenta todavía.
 
 ## Acceso del taller al bot (2026-09-20)
 

@@ -31,6 +31,7 @@ from registro_cotizaciones import guardar_fila as _reg_cot_fila, leer as _reg_co
     marcar_estado as _reg_cot_estado
 from movimientos import registrar as _mov_registrar, leer as _mov_leer, \
     resumen_pedido as _mov_resumen
+from avance import estado as _av_estado, recalcular as _av_recalcular
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
     guardar_hoja_cotizacion as _cot_guardar_hoja, guardar_tiempo as _cot_guardar_tiempo, \
@@ -533,6 +534,7 @@ TOOLS = [
             "properties": {
                 "cliente":       {"type": "string"},
                 "descripcion":   {"type": "string", "description": "Ej: '20 tazas logo empresa'"},
+                "piezas":        {"type": "integer", "description": "Cuántas piezas son. IMPRESCINDIBLE: sin esto no se puede deducir el avance. Si no lo dicen, PREGÚNTALO."},
                 "proceso":       {"type": "integer", "description": "1=Clásico (modelado→entregado) | 2=Bizcocho (esmaltado inicial→entregado)"},
                 "fecha_entrega": {"type": "string", "description": "DD/MM/YYYY"},
                 "deal_id":       {"type": "string"},
@@ -543,7 +545,10 @@ TOOLS = [
     },
     {
         "name": "actualizar_etapa_produccion",
-        "description": "Actualiza la etapa de producción de un pedido. Llamar cuando Daniela informa avance.",
+        "description": ("CORRIGE la etapa de un pedido a mano. Normalmente NO hace falta: "
+                        "la etapa se deduce sola de las jornadas del taller, y un pedido "
+                        "avanza cuando las piezas reportadas alcanzan su cantidad. Usa esto "
+                        "solo cuando la etapa deducida esté mal o falten jornadas por anotar."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1098,17 +1103,24 @@ PROCESO 2 (Bizcocho): esmaltado inicial → pintar bizcocho → primera quema �
 
 FLUJO NUEVO PEDIDO:
 - Deal pasa a "produccion" o Daniela confirma inicio → agregar_pedido_produccion
+- PREGUNTA SIEMPRE CUÁNTAS PIEZAS SON. Sin ese número no se puede deducir el avance
+  y el pedido se queda ciego.
 - Etapa inicial automática: Proceso 1→modelado | Proceso 2→esmaltado inicial
-- Confirmar: "Pedido [cliente] registrado · Proceso [N] · Entrega [fecha]"
 
-ACTUALIZAR (comandos de Daniela):
-"avanza [cliente] a [etapa]" | "[cliente] ya está en [etapa]" | "listo el [etapa] de [cliente]"
-→ actualizar_etapa_produccion(cliente, etapa)
-Si etapa="entregado" y hay deal_id → también actualizar_deal_hs(deal_id, etapa="entrega")
+LA ETAPA SE DEDUCE, NO SE DECLARA
+Un pedido de 150 platos no "está en pintar": tiene 60 pintados y 90 sin pintar. La etapa
+sale sola de las jornadas — cuando las piezas reportadas en una etapa alcanzan la cantidad
+del pedido, el pedido pasa a la siguiente. Nadie tiene que actualizarla.
+- La deducción SOLO AVANZA: una jornada vieja nunca echa para atrás una corrección.
+- actualizar_etapa_produccion quedó solo para CORREGIR cuando la deducción esté mal.
+- Si etapa="entregado" y hay deal_id → también actualizar_deal_hs(deal_id, etapa="entrega")
 
 CONSULTAS:
 "¿qué entrega esta semana?" | "¿en qué está [cliente]?" | "¿qué hay en producción?"
-→ leer_produccion + filtrar según pregunta · mostrar: cliente · etapa · fecha entrega
+→ leer_produccion · muestra etapa, cuántas piezas van de cuántas, y cuántas horas de
+taller faltan para cerrar la etapa en curso (al ritmo medido en las jornadas de ESE
+pedido, a 12 horas de taller al día: dos personas por seis horas).
+Si la proyección se pasa de la fecha de entrega, DILO sin que te pregunten.
 
 REGLAS:
 - NUNCA marcar entregado sin confirmación explícita.
@@ -1438,7 +1450,8 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admi
                         resultado = _prod_agregar(
                             inp["cliente"], inp["descripcion"],
                             inp.get("proceso", 1), inp["fecha_entrega"],
-                            inp.get("deal_id", ""), inp.get("notas", "")
+                            inp.get("deal_id", ""), inp.get("notas", ""),
+                            inp.get("piezas", 0)
                         )
                     elif name == "registrar_jornada":
                         resultado = _jornada_registrar(inp)
@@ -1878,11 +1891,17 @@ def _jornada_registrar(inp):
     if etapa and inp.get("pedido"):
         nota = f"{inp['persona']}: {inp['tarea']}, {inp['piezas']} piezas"
         salida += "\n" + _prod_actualizar(inp["pedido"], etapa, nota)
+    elif inp.get("pedido"):
+        # La etapa se deduce sola: si con esta jornada el pedido terminó una,
+        # avanza sin que nadie lo declare.
+        movidos = _av_recalcular(inp["pedido"])
+        if movidos:
+            salida += "\n" + movidos
     return salida
 
 
 PROD_CABECERA = ["#", "Cliente", "Descripción", "Deal ID", "Proceso", "Inicio",
-                 "Entrega", "Etapa", "Actualizado", "Notas"]
+                 "Entrega", "Etapa", "Actualizado", "Notas", "Piezas"]
 
 
 def _registrar_cotizacion(inp):
@@ -1936,16 +1955,17 @@ def _prod_asegurar():
     """La pestaña se crea sola la primera vez. Pedírsela al usuario es mandarlo a
     hacer trabajo manual que el bot puede hacer — y a equivocarse de archivo, que
     es lo que pasó el 2026-09-20."""
-    if leer_sheet_numericos("Producción!A1:J1"):
+    if leer_sheet_numericos("Producción!A1:K1"):
         return ""
     r = crear_pestana("Producción")
     if str(r).startswith("Error") or str(r).startswith("❌"):
         return str(r)
-    escribir_rango("Producción!A1:J1", [PROD_CABECERA])
+    escribir_rango("Producción!A1:K1", [PROD_CABECERA])
     return ""
 
 
-def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", notas=""):
+def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", notas="",
+                  piezas=0):
     fallo = _prod_asegurar()
     if fallo:
         return "❌ No pude crear la pestaña Producción: " + fallo
@@ -1953,25 +1973,20 @@ def _prod_agregar(cliente, descripcion, proceso, fecha_entrega, deal_id="", nota
     num = max(len(filas), 1)
     etapa_inicial = "modelado" if int(proceso) == 1 else "esmaltado inicial"
     hoy = datetime.now().strftime("%d/%m/%Y")
-    row = [num, cliente, descripcion, deal_id, proceso, hoy, fecha_entrega, etapa_inicial, hoy, notas]
-    return agregar_fila("Producción!A:J", row)
+    row = [num, cliente, descripcion, deal_id, proceso, hoy, fecha_entrega,
+           etapa_inicial, hoy, notas, int(piezas or 0)]
+    r = agregar_fila("Producción!A:K", row)
+    if str(r).startswith(("Error", "❌")):
+        return str(r)
+    aviso = ("" if int(piezas or 0) else
+             "\n⚠️ Sin la cantidad de piezas no puedo deducir el avance. ¿Cuántas son?")
+    return f"✅ Pedido de {cliente} registrado · entrega {fecha_entrega}." + aviso
 
 
 def _prod_leer():
-    """Los pedidos en producción, con el avance que sale de las jornadas."""
-    base = leer_sheet("Producción!A:J")
-    filas = leer_sheet_numericos("Producción!A:J")
-    extras = []
-    for fila in filas[1:]:
-        cliente = str(fila[1]).strip() if len(fila) > 1 else ""
-        if not cliente:
-            continue
-        avance = _jor_avance(cliente)
-        if avance:
-            extras.append(f"· {cliente}: {avance}")
-    if extras:
-        base += "\n\nAvance según las jornadas del taller:\n" + "\n".join(extras)
-    return base
+    """El tablero: la etapa sale de las jornadas, no de lo que alguien declaró."""
+    _av_recalcular()
+    return _av_estado()
 
 
 def _prod_actualizar(cliente, etapa, notas=""):
