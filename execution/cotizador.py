@@ -57,6 +57,14 @@ PARAMS_DEFECTO = {
     "salario_mensual":        4_000_000,
     "horas_semanales":        48,
     "semanas_mes":            4,
+    # Lo que cuesta de verdad una hora de taller (Camilo, 2026-09-20: $10.000).
+    # Si está en cero se deduce del salario mensual, que es lo que se hacía antes
+    # y daba $20.833 — más del doble. Puesto a mano, este manda.
+    "costo_hora_mo":          10_000,
+    # La capacidad real del taller: dos personas, 6 horas al día cada una.
+    # De acá sale cuántos días de trabajo quedan para un pedido.
+    "personas_taller":        2,
+    "horas_dia_persona":      6,
     # Reparto de fijos
     "volumen_referencia":     150,        # piezas/mes — producción real (Camilo, 2026-09-17)
     "gastos_admin_mes":       1_230_000,  # contador 10% + gerente 20% + supervisor 30%
@@ -505,9 +513,13 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
 
     minutos_totales = max(0.0, sum(minutos_por_etapa.values()))
 
-    horas_mes   = float(params["horas_semanales"]) * float(params["semanas_mes"])
-    valor_hora  = float(params["salario_mensual"]) / horas_mes if horas_mes else 0
-    costo_mo    = (minutos_totales / 60.0) * valor_hora
+    # El costo por hora puesto a mano manda sobre el deducido del salario: el
+    # salario mensual incluye gente que no está produciendo piezas.
+    valor_hora = float(params.get("costo_hora_mo", 0) or 0)
+    if not valor_hora:
+        horas_mes  = float(params["horas_semanales"]) * float(params["semanas_mes"])
+        valor_hora = float(params["salario_mensual"]) / horas_mes if horas_mes else 0
+    costo_mo = (minutos_totales / 60.0) * valor_hora
 
     # ── Materiales y proceso ────────────────────────────────────────────────
     # El esmalte se puede cargar en pesos por pieza o en onzas: si hay onzas, mandan.

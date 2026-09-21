@@ -200,3 +200,49 @@ Lo que eso desbloquea, en orden de valor:
   mezclan pedidos? Si mezclan, la jornada necesita repartir las piezas entre pedidos.
 - ¿Cuántas horas al día pone cada una? Sin eso no hay proyección de fecha.
 - ¿La etapa deducida reemplaza a la manual, o conviven?
+
+---
+
+## Acceso del taller al bot (2026-09-20)
+
+**Las dos personas del taller NO necesitan permiso en Google Sheets.** Quien escribe en la
+hoja es la cuenta de servicio del bot (`amphora-cfo@amphora-bc-496723.iam.gserviceaccount.com`),
+no la persona. Darles acceso al Sheet sería además peligroso: verían cartera, márgenes y
+nómina, y podrían romper fórmulas sin querer.
+
+Lo que necesitan es acceso **al bot**, y para eso hubo que ponerle roles — antes
+respondía a cualquiera que lo encontrara, con acceso completo a cartera, flujo de caja,
+HubSpot y Meta Ads.
+
+| Rol | Quién | Qué puede |
+|---|---|---|
+| `admin` | Camilo (y quien él agregue) | las 43 herramientas |
+| `taller` | las dos personas que producen | 8: jornadas, pendientes y ver producción |
+| desconocido | cualquiera | nada — le devuelve su código para que Camilo lo autorice |
+
+Al rol `taller` ni siquiera se le **ofrecen** las otras herramientas al modelo, así que no
+puede llamarlas aunque se lo pidan. Y usa un prompt distinto (`SYSTEM_TALLER`), corto y
+enfocado: si le preguntan por plata o clientes, responde que de eso no sabe.
+
+### Cómo dar de alta a alguien
+1. La persona le escribe `/chatid` al bot. Le responde su código (o sale en el mensaje de
+   rechazo).
+2. Camilo agrega ese número a la variable de entorno en Railway:
+   - `TALLER_CHAT_IDS` — separados por coma, para la gente del taller.
+   - `ADMIN_CHAT_IDS` — para quien deba verlo todo.
+3. Railway reinicia y listo.
+
+**Ojo:** si ninguna de las dos variables está puesta, el bot se comporta como antes
+(abierto a todos). Como `ADMIN_CHAT_ID` ya existe en Railway, los roles se activan solos
+en el próximo despliegue.
+
+### Mezclan lotes
+Confirmado por Camilo: las dos personas trabajan por prioridades y mezclan pedidos en una
+misma sesión. Por eso el prompt del taller pide registrar **una jornada por pedido**,
+repartiendo piezas y tiempo en proporción, y diciendo cómo se repartió.
+
+### Los números del taller
+- **$10.000 la hora** de trabajo (`costo_hora_mo`). Antes se deducía del salario mensual
+  y daba **$20.833** — más del doble. El valor puesto a mano ahora manda.
+- **2 personas × 6 horas = 12 horas de taller al día** (`personas_taller`,
+  `horas_dia_persona`). Es la base para proyectar fechas de entrega.

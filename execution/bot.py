@@ -45,6 +45,45 @@ TELEGRAM_TOKEN    = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ADMIN_CHAT_ID            = os.getenv("ADMIN_CHAT_ID")
 PRODUCTION_GROUP_CHAT_ID = os.getenv("PRODUCTION_GROUP_CHAT_ID")
+
+
+# ── Quién puede hablarle al bot, y de qué ────────────────────────────────────
+# El bot llega a la cartera, al flujo de caja y a Meta Ads. Sin roles, darle el
+# contacto a alguien del taller es darle todo eso. El taller no necesita permiso
+# en el Sheet: escribe la cuenta de servicio del bot, no la persona.
+def _ids(*nombres):
+    salida = set()
+    for nombre in nombres:
+        for x in (os.getenv(nombre) or "").replace(";", ",").split(","):
+            x = x.strip()
+            if x.lstrip("-").isdigit():
+                salida.add(int(x))
+    return salida
+
+
+ADMIN_IDS  = _ids("ADMIN_CHAT_IDS", "ADMIN_CHAT_ID")
+TALLER_IDS = _ids("TALLER_CHAT_IDS", "PRODUCTION_GROUP_CHAT_ID")
+
+# Lo único que el taller puede hacer. Todo lo demás —plata, clientes, anuncios—
+# ni siquiera se le ofrece al modelo cuando escribe alguien del taller.
+HERRAMIENTAS_TALLER = {
+    "registrar_jornada", "leer_jornadas", "resumen_tiempos",
+    "agregar_pendiente", "leer_pendientes", "cerrar_pendiente",
+    "leer_produccion", "actualizar_etapa_produccion",
+}
+
+
+def rol_de(chat_id):
+    """admin · taller · None (desconocido)."""
+    if chat_id in ADMIN_IDS:
+        return "admin"
+    if chat_id in TALLER_IDS:
+        return "taller"
+    # Sin nada configurado el bot queda como estaba: abierto. Apenas exista un
+    # ADMIN_CHAT_ID en el entorno, los desconocidos dejan de entrar.
+    if not ADMIN_IDS and not TALLER_IDS:
+        return "admin"
+    return None
 TG_API            = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -752,6 +791,48 @@ TOOLS = [
     }
 ]
 
+SYSTEM_TALLER = """Eres el asistente del taller de Bosque y Cielo (cerámica, Cali). Solo español.
+
+Hablas con las dos personas que producen. NO eres su jefe ni les pides cuentas: les
+ahorras trabajo. Sé breve y cálido; mensajes de dos o tres líneas, sin listas largas.
+
+LO ÚNICO QUE HACES
+1. Anotar la jornada del día — lo que hicieron y en cuánto tiempo.
+2. Anotar y cerrar pendientes.
+3. Decir en qué van los pedidos.
+
+Si te preguntan por plata, precios, clientes, cotizaciones o cualquier otra cosa, di con
+naturalidad que de eso no sabes y que le pregunten a Camilo. No inventes ni especules.
+
+LA JORNADA
+"empecé a pintar a las 10:00 am, terminé a las 2:00 pm, hice 10 platos"
+→ registrar_jornada(persona, tarea, piezas, hora_inicio, hora_fin, pedido, tamano)
+
+De esos partes salen los minutos por pieza reales del taller, así que valen oro. Para que
+sirvan necesitas cuatro cosas, y las pides DE A UNA, nunca todas juntas:
+- QUIÉN: si no firma, pregunta quién es. Recuerda el nombre durante la conversación.
+- TAMAÑO de las piezas (XS a XL): es lo que más se olvida y sin eso la medición no sirve.
+- PEDIDO o cliente: como MEZCLAN LOTES, una jornada puede tener piezas de varios pedidos.
+  Si mencionan más de uno, registra UNA JORNADA POR PEDIDO repartiendo las piezas y el
+  tiempo en proporción, y diles cómo lo repartiste.
+- DIFICULTAD (facil/medio/dificil): solo si es trabajo de pintura y no es obvio.
+
+Si no saben algo o dicen "después", anota lo que haya y sigue. Nunca insistas dos veces.
+
+Cuando termines de anotar, confirma en una línea lo que entendiste y los minutos por
+pieza que dio. Si alguien reporta algo muy distinto a lo normal, dilo sin regañar:
+"ojo, eso da 80 min por pieza y normalmente van 24 — ¿pasó algo?".
+
+PENDIENTES
+"hay que comprar esmalte transparente" → agregar_pendiente
+"¿qué falta?" → leer_pendientes · "ya lo compré" → cerrar_pendiente
+
+PEDIDOS
+"¿en qué vamos?" / "¿qué hay que entregar?" → leer_produccion
+Si terminaron una etapa completa de un pedido → actualizar_etapa_produccion.
+"""
+
+
 SYSTEM_PROMPT = """Eres el CFO virtual de Amphora B&C (cerámica colombiana). Solo español.
 
 REGLAS ABSOLUTAS DE RESPUESTA:
@@ -1140,8 +1221,14 @@ def descargar_foto(file_id: str):
         return None
 
 
-def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
+def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admin") -> str:
     history = conversation_history.get(chat_id, [])
+    if rol == "taller":
+        herramientas = [t for t in TOOLS if t["name"] in HERRAMIENTAS_TALLER]
+        sistema = SYSTEM_TALLER
+    else:
+        herramientas = TOOLS
+        sistema = SYSTEM_PROMPT
 
     if foto_bytes:
         img_b64 = base64.standard_b64encode(foto_bytes).decode()
@@ -1168,8 +1255,8 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None) -> str:
                 response = client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=512,
-                    system=SYSTEM_PROMPT + f"\n\nFECHA HOY: {date.today().strftime('%d/%m/%Y')}",
-                    tools=TOOLS,
+                    system=sistema + f"\n\nFECHA HOY: {date.today().strftime('%d/%m/%Y')}",
+                    tools=herramientas,
                     tool_choice={"type": "auto"},
                     messages=messages
                 )
@@ -2067,10 +2154,19 @@ def main():
                 if not chat_id or (not texto and not foto_bytes):
                     continue
 
-                print(f"[{chat_id}] {texto or '[foto]'}")
+                rol = rol_de(chat_id)
+                if not rol:
+                    print(f"[{chat_id}] RECHAZADO: {texto[:60]}")
+                    tg_send(chat_id,
+                            "Hola. Este bot es interno de Bosque y Cielo y tu número no "
+                            f"está autorizado.\n\nSi trabajas acá, pásale este código a "
+                            f"Camilo para que te dé acceso: `{chat_id}`")
+                    continue
+
+                print(f"[{chat_id}/{rol}] {texto or '[foto]'}")
                 tg_send(chat_id, "⏳")
                 try:
-                    respuesta = procesar_mensaje(chat_id, texto, foto_bytes)
+                    respuesta = procesar_mensaje(chat_id, texto, foto_bytes, rol)
                     tg_send(chat_id, respuesta)
                 except Exception as e:
                     tg_send(chat_id, f"❌ Error: {e}")

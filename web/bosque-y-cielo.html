@@ -531,6 +531,7 @@
   // ───────────────────────────────────────────────────────────────────
   var PARAMS = {
     salario_mensual: 4000000, horas_semanales: 48, semanas_mes: 4,
+    costo_hora_mo: 10000, personas_taller: 2, horas_dia_persona: 6,
     volumen_referencia: 150, gastos_admin_mes: 1230000,
     arriendo_mes: 3200000, servicios_mes: 1000000,
     pct_uso_local: 20, pct_uso_servicios: 70,
@@ -544,7 +545,10 @@
 
   // Cómo se muestra cada parámetro en la pestaña de Ajustes.
   var FICHA_PARAMS = [
-    ["salario_mensual",     "Salario mensual",            "$",   "Lo que cuesta un puesto de taller al mes"],
+    ["costo_hora_mo",       "Hora de taller",             "$",   "Lo que cuesta una hora de trabajo. Si lo dejas en 0 se deduce del salario mensual, que suele salir más alto porque incluye gente que no está produciendo piezas."],
+    ["personas_taller",     "Personas produciendo",       "",    "Cuántas personas hacen piezas"],
+    ["horas_dia_persona",   "Horas al día por persona",   "h",   "Con esto y los minutos por pieza sale cuántos días toma un pedido"],
+    ["salario_mensual",     "Salario mensual",            "$",   "Solo se usa si la hora de taller está en 0"],
     ["horas_semanales",     "Horas por semana",           "h",   ""],
     ["semanas_mes",         "Semanas por mes",            "",    ""],
     ["volumen_referencia",  "Piezas al mes",              "",    "Entre estas se reparten los costos fijos"],
@@ -791,8 +795,13 @@
     if (minutos < 0) minutos = 0;
 
     // Mano de obra
-    var horasMes = Number(P.horas_semanales) * Number(P.semanas_mes);
-    var valorHora = horasMes ? Number(P.salario_mensual) / horasMes : 0;
+    // La hora puesta a mano manda sobre la deducida del salario: el salario
+    // mensual incluye gente que no está produciendo piezas.
+    var valorHora = Number(P.costo_hora_mo) || 0;
+    if (!valorHora) {
+      var horasMes = Number(P.horas_semanales) * Number(P.semanas_mes);
+      valorHora = horasMes ? Number(P.salario_mensual) / horasMes : 0;
+    }
     var manoObra = (minutos / 60) * valorHora;
 
     // Materiales — cada referencia puede traer los suyos
