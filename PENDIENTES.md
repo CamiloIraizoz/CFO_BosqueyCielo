@@ -246,3 +246,7 @@ repartiendo piezas y tiempo en proporción, y diciendo cómo se repartió.
   y daba **$20.833** — más del doble. El valor puesto a mano ahora manda.
 - **2 personas × 6 horas = 12 horas de taller al día** (`personas_taller`,
   `horas_dia_persona`). Es la base para proyectar fechas de entrega.
+- **La gerente: $5.000.000/mes, 20% a producción** (`sueldo_gerente_mes`,
+  `pct_gerente_produccion`). Confirmado por Camilo el 2026-09-21 — el resto de su día
+  son tareas gerenciales. Ese 20% son $6.667 de cada pieza; si su rol cambia, hay que
+  volver a mirarlo porque es el parámetro que más mueve el precio.

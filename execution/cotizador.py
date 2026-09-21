@@ -71,7 +71,11 @@ PARAMS_DEFECTO = {
     # (planear, supervisar, calidad). Lo que dedica a ventas, clientes y plata es
     # gasto de operación y lo recupera el margen, no el costo de la pieza.
     "sueldo_gerente_mes":     5_000_000,  # Camilo, 2026-09-21
-    "pct_gerente_produccion": 20,         # qué parte de su tiempo es producción
+    # 20% confirmado por Camilo el 2026-09-21: el resto de su día son tareas
+    # gerenciales (ventas, clientes, plata), que no son costo de la pieza.
+    # Es el parámetro más sensible del modelo — cada 10% son $3.333 por pieza
+    # al volumen de referencia actual — así que revisarlo si cambia su rol.
+    "pct_gerente_produccion": 20,
     "gastos_admin_mes":         230_000,  # contador 10% + supervisor 30% (sin la gerente)
     "arriendo_mes":           3_200_000,
     "servicios_mes":          1_000_000,  # incluye la energía de las quemas
