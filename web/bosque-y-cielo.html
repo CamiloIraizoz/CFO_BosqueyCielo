@@ -532,7 +532,8 @@
   var PARAMS = {
     salario_mensual: 4000000, horas_semanales: 48, semanas_mes: 4,
     costo_hora_mo: 10000, personas_taller: 2, horas_dia_persona: 6,
-    volumen_referencia: 150, gastos_admin_mes: 1230000,
+    volumen_referencia: 150, gastos_admin_mes: 230000,
+    sueldo_gerente_mes: 5000000, pct_gerente_produccion: 20,
     arriendo_mes: 3200000, servicios_mes: 1000000,
     pct_uso_local: 20, pct_uso_servicios: 70,
     desperdicio_pct: 10, mercadeo_pct: 5, margen_pct: 40,
@@ -552,7 +553,9 @@
     ["horas_semanales",     "Horas por semana",           "h",   ""],
     ["semanas_mes",         "Semanas por mes",            "",    ""],
     ["volumen_referencia",  "Piezas al mes",              "",    "Entre estas se reparten los costos fijos"],
-    ["gastos_admin_mes",    "Gastos administrativos",     "$",   "Contador, gerencia, supervisión"],
+    ["sueldo_gerente_mes",  "Sueldo de la gerente",       "$",   "Lo que cuesta al mes, completo"],
+    ["pct_gerente_produccion","Su tiempo en producción",   "%",   "Solo esta parte entra al costo de la pieza: planear, supervisar, calidad. Lo que dedica a ventas y plata es gasto de operación y lo recupera el margen."],
+    ["gastos_admin_mes",    "Otros administrativos",      "$",   "Contador y supervisión, sin contar la gerente"],
     ["arriendo_mes",        "Arriendo",                   "$",   ""],
     ["servicios_mes",       "Servicios públicos",         "$",   "Incluye la energía de las quemas"],
     ["pct_uso_local",       "% del local en producción",  "%",   ""],
@@ -840,7 +843,10 @@
     var locativos = (Number(P.arriendo_mes) * Number(P.pct_uso_local) / 100) +
                     (Number(P.servicios_mes) * Number(P.pct_uso_servicios) / 100);
     var arriendo = locativos / volumen;
-    var admin = Number(P.gastos_admin_mes) / volumen;
+    // De la gerencia solo entra la parte de su tiempo que va a producción.
+    var gerenteProd = (Number(P.sueldo_gerente_mes) || 0) *
+                      (Number(P.pct_gerente_produccion) || 0) / 100;
+    var admin = ((Number(P.gastos_admin_mes) || 0) + gerenteProd) / volumen;
     var granTotal = directoTotal + mercadeo + arriendo + admin;
 
     var margen = Number(P.margen_pct) / 100;
@@ -874,7 +880,7 @@
         ]],
         ["Costos indirectos", mercadeo + arriendo + admin, [
           ["Mercadeo", mercadeo], ["Arriendo y servicios", arriendo],
-          ["Administración", admin]
+          ["Gerencia (" + (Number(P.pct_gerente_produccion) || 0) + "% de su tiempo) y administración", admin]
         ]]
       ],
       granTotal:granTotal, margen:pvp - granTotal, pvp:pvp,

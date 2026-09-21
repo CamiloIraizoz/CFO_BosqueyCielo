@@ -67,7 +67,12 @@ PARAMS_DEFECTO = {
     "horas_dia_persona":      6,
     # Reparto de fijos
     "volumen_referencia":     150,        # piezas/mes — producción real (Camilo, 2026-09-17)
-    "gastos_admin_mes":       1_230_000,  # contador 10% + gerente 20% + supervisor 30%
+    # La gerencia entra al costo SOLO por la parte de su tiempo que va a producción
+    # (planear, supervisar, calidad). Lo que dedica a ventas, clientes y plata es
+    # gasto de operación y lo recupera el margen, no el costo de la pieza.
+    "sueldo_gerente_mes":     5_000_000,  # Camilo, 2026-09-21
+    "pct_gerente_produccion": 20,         # qué parte de su tiempo es producción
+    "gastos_admin_mes":         230_000,  # contador 10% + supervisor 30% (sin la gerente)
     "arriendo_mes":           3_200_000,
     "servicios_mes":          1_000_000,  # incluye la energía de las quemas
     "pct_uso_local":          20.0,       # % del local dedicado a producción
@@ -129,6 +134,8 @@ PARAMS_PREGUNTABLES = {
     "minutos_otros_pasos": "Además del acabado, ¿cuántos minutos por pieza se van en "
                            "preparación, pulido, cargue de horno y empaque?",
     "volumen_referencia":  "¿Cuántas piezas al mes está produciendo el taller?",
+    "pct_gerente_produccion": ("¿Qué parte del tiempo de la gerente se va en producción "
+                               "—planear, supervisar, calidad— y no en ventas o plata?"),
     "margen_pct":          "¿Qué margen quieres aplicar sobre el costo? (en %)",
 }
 
@@ -549,7 +556,9 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
     volumen = float(params["volumen_referencia"]) or 1
     mercadeo  = directo_total * float(params["mercadeo_pct"]) / 100.0
     arriendo  = fijos_locativos_mes(params) / volumen
-    admin     = float(params["gastos_admin_mes"]) / volumen
+    gerente_produccion = (float(params.get("sueldo_gerente_mes", 0) or 0)
+                          * float(params.get("pct_gerente_produccion", 0) or 0) / 100.0)
+    admin     = (float(params["gastos_admin_mes"]) + gerente_produccion) / volumen
     gran_total = directo_total + mercadeo + arriendo + admin
 
     if piezas_pedido < volumen * 0.2:
@@ -596,7 +605,8 @@ def cotizar(cantidad: int, tamano: str, dificultad: str = "medio",
         ("Costos indirectos", indirectos, [
             ("Mercadeo", mercadeo),
             ("Arriendo y servicios", arriendo),
-            ("Administración", admin),
+            (f"Gerencia ({float(params.get('pct_gerente_produccion', 0) or 0):g}% de su tiempo) "
+             f"y administración", admin),
         ]),
     ]
 
