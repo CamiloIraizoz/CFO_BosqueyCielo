@@ -85,3 +85,37 @@ ingresos y egresos, que hoy tienen cabeceras distintas entre sí. Está sin deci
 cotizado. Si el margen real sale muy por debajo del que prometía la cotización, el
 cotizador tiene costos que no está viendo — y eso es lo que hay que corregir en los
 parámetros, no en el precio.
+
+## PNL por proyecto y por línea de negocio (2026-09-22)
+
+**Un solo libro.** La pestaña `Movimientos` tiene una columna **Proyecto** (K) que casi
+nunca se llenaba. Ahora `registrar_movimiento` la escribe siempre, y esa misma fila
+alimenta dos vistas: el PNL del mes (por categoría) y el del proyecto
+(`execution/proyectos.py`). No hay segundo libro ni doble digitación — la pestaña
+*Movimientos por Pedido* que existió el 2026-09-21 quedó descartada por eso.
+
+**Tres líneas de negocio**, y cada proyecto pertenece a una:
+`personalizacion` (a la medida) · `b2b` (volumen para revender) · `coleccion` (propia).
+
+**La pestaña `Proyectos`** quedó así: Proyecto · Línea · Cliente · Estado · Inicio ·
+Cierre · Cotización · Notas. La v1 tenía 20 columnas con presupuesto original, revisado
+y real vía SUMIFS; nadie mantiene tres presupuestos. Si la pestaña vieja todavía está,
+`crear_proyecto` se niega a escribir y pide `reconstruir_proyectos`, que la aparta como
+*Proyectos (v1)* sin borrar nada.
+
+**Cómo se lee el PNL de un proyecto:**
+
+```
+Ingresos − materia prima − mano de obra = margen bruto
+        − producción indirecta − comercial = contribución
+```
+
+La **contribución** es lo que el proyecto deja para pagar los fijos del mes. Los fijos
+(arriendo, servicios, gerencia) NO se reparten entre proyectos a propósito: repartirlos
+exige un criterio discutible y esconde la señal que importa, que es si el proyecto cubre
+sus propios costos. Un proyecto con contribución positiva todavía puede no alcanzar si
+el mes tuvo pocos proyectos.
+
+**Clasificación de egresos** (`proyectos.GRUPOS`): materia prima · mano de obra ·
+producción indirecta · comercial · otros. Se buscan **palabras completas**: buscar "gas"
+como subcadena clasificaba "Gastos Operativos" como producción indirecta.

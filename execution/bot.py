@@ -29,8 +29,9 @@ from jornadas import registrar as _jor_registrar, resumen as _jor_resumen, \
 from pendientes import agregar as _pend_agregar, leer as _pend_leer, cerrar as _pend_cerrar
 from registro_cotizaciones import guardar_fila as _reg_cot_fila, leer as _reg_cot_leer, \
     marcar_estado as _reg_cot_estado
-from movimientos import registrar as _mov_registrar, leer as _mov_leer, \
-    resumen_pedido as _mov_resumen
+from movimientos import registrar as _mov_registrar, leer as _mov_leer
+from proyectos import crear as _proy_crear, pnl as _proy_pnl, por_linea as _proy_lineas, \
+    listar as _proy_listar, reconstruir as _proy_reconstruir
 from avance import estado as _av_estado, recalcular as _av_recalcular
 from cotizador import cotizar as _cotizar, grado_acabado as _grado_acabado, formato_telegram as _cot_formato, \
     guardar_parametro as _cot_guardar_param, parametros_pendientes as _cot_pendientes, PARAMS_PREGUNTABLES as _COT_PREGUNTAS, \
@@ -444,14 +445,70 @@ TOOLS = [
         }
     },
     {
+        "name": "crear_proyecto",
+        "description": (
+            "Da de alta un proyecto para poder llevarle su propio PNL. Cada proyecto "
+            "pertenece a UNA línea de negocio: 'personalizacion' (pedidos a la medida), "
+            "'b2b' (volumen para otro negocio que revende) o 'coleccion' (la colección "
+            "propia, tienda y online). Llámalo cuando empiece un pedido o una colección "
+            "nueva, o cuando alguien registre plata de algo que todavía no existe."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "proyecto":   {"type": "string", "description": "Nombre corto y reconocible"},
+                "linea":      {"type": "string", "description": "personalizacion | b2b | coleccion"},
+                "cliente":    {"type": "string"},
+                "cotizacion": {"type": "string", "description": "Total cotizado en pesos, si lo hay"},
+                "notas":      {"type": "string"}
+            },
+            "required": ["proyecto", "linea"]
+        }
+    },
+    {
+        "name": "reconstruir_proyectos",
+        "description": (
+            "Pasa la pestaña Proyectos al formato nuevo (Proyecto · Línea · Cliente · "
+            "Estado · Inicio · Cierre · Cotización · Notas). Aparta la vieja como "
+            "'Proyectos (v1)' SIN borrar nada. Úsalo solo si crear_proyecto avisa que "
+            "la pestaña es la vieja, y confirma con Camilo antes."
+        ),
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "pnl_proyecto",
+        "description": (
+            "El mini PNL de un proyecto: ingresos, costos agrupados (materia prima, mano "
+            "de obra, producción indirecta, comercial), margen bruto y contribución, más "
+            "el contraste con lo cotizado. Para '¿cuánto me dejó X?', '¿estoy ganando "
+            "con X?', '¿cómo va el proyecto de X?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"proyecto": {"type": "string"}},
+            "required": ["proyecto"]
+        }
+    },
+    {
+        "name": "pnl_lineas",
+        "description": (
+            "Compara las tres líneas de negocio —Personalización, B2B y Colección "
+            "propia— con la contribución de cada una y de cada proyecto dentro. Para "
+            "'¿qué línea deja más?', '¿cómo vamos por línea?', '¿dónde estoy perdiendo?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"linea": {"type": "string", "description": "Opcional: una sola línea"}}
+        }
+    },
+    {
         "name": "registrar_movimiento",
         "description": (
-            "Anota plata que entra o sale POR UN PEDIDO: el anticipo que pagó el cliente, "
-            "los bizcochos que se compraron para ese pedido, la mano de obra. Es la "
-            "dimensión que las pestañas de ingresos y egresos no tienen — ellas van por "
-            "línea de negocio, no por pedido. Si el movimiento NO es de un pedido puntual "
-            "(arriendo, servicios, nómina del mes), no uses esto: va en su pestaña de "
-            "siempre con agregar_fila."
+            "Registra un ingreso o un egreso en la pestaña Movimientos, atribuido a un "
+            "PROYECTO. Es una sola fila que sirve para dos cosas: el PNL del mes (por "
+            "categoría) y el PNL del proyecto. Pregunta SIEMPRE a qué proyecto pertenece: "
+            "sin eso el movimiento no entra a ningún PNL de proyecto. Los gastos generales "
+            "del mes (arriendo, servicios, nómina fija) van sin proyecto, y está bien."
         ),
         "input_schema": {
             "type": "object",
@@ -459,28 +516,25 @@ TOOLS = [
                 "tipo":        {"type": "string", "description": "ingreso | egreso"},
                 "monto":       {"type": "number", "description": "En pesos, sin puntos ni $"},
                 "concepto":    {"type": "string", "description": "Ej. 'Anticipo 50%', 'Bizcochos 10 tazas'"},
-                "pedido":      {"type": "string", "description": "Cliente o pedido al que pertenece"},
-                "categoria":   {"type": "string", "description": "Materia Prima · Mano de Obra · Gastos Operativos · B2B …"},
+                "proyecto":    {"type": "string", "description": "A qué proyecto pertenece. PREGÚNTALO si no lo dicen: sin proyecto no entra a ningún PNL."},
+                "categoria":   {"type": "string", "description": "Materia Prima · Mano de Obra · Gastos Operativos · Ecommerce · B2B · Personalización …"},
                 "fecha":       {"type": "string", "description": "DD/MM/YYYY. Vacío = hoy"},
-                "forma_pago":  {"type": "string", "description": "Bold · Efectivo · Transferencia"},
-                "pestana_pnl": {"type": "string", "description": "En qué pestaña del PNL quedó también registrado, si ya lo hiciste"},
-                "notas":       {"type": "string"}
+                "forma_pago":  {"type": "string", "description": "Bold · Efectivo · Transferencia · Shopify"},
+                "cliente":     {"type": "string", "description": "Cliente o proveedor"}
             },
-            "required": ["tipo", "monto", "concepto", "pedido"]
+            "required": ["tipo", "monto", "concepto"]
         }
     },
     {
         "name": "leer_movimientos",
         "description": (
-            "La plata de un pedido: cuánto se cobró, cuánto se gastó y qué margen real "
-            "dejó, contrastado con lo que se cotizó. Para '¿cuánto me dejó el pedido de "
-            "X?', '¿cuánto llevo gastado en X?', '¿ya me pagaron todo?'."
+            "El detalle de movimientos de un proyecto, uno por uno. Para ver el margen "
+            "usa pnl_proyecto, que es más útil."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "pedido":  {"type": "string", "description": "Cliente o pedido. Vacío = todos"},
-                "resumen": {"type": "boolean", "description": "true = solo el balance, sin el detalle"}
+                "proyecto": {"type": "string", "description": "Vacío = todos"}
             }
         }
     },
@@ -1158,27 +1212,35 @@ guardar_tiempo_estandar. Eso reemplaza el dato de respaldo y el precio deja de s
 estimado.
 
 ────────────────────────────────────────
-LA PLATA DE CADA PEDIDO
+PROYECTOS Y SU PNL
 ────────────────────────────────────────
-Las pestañas de ingresos y egresos van por LÍNEA DE NEGOCIO (Shop, B2B, Pottery Lab) y
-por CATEGORÍA de gasto (Materia Prima, Mano de Obra). Sirven para el PNL, pero ninguna
-dice a qué pedido pertenece la plata. La pestaña Movimientos es esa dimensión que falta.
+Todo lo que se produce pertenece a UN proyecto, y cada proyecto a UNA de tres líneas:
+· *personalizacion* — pedidos a la medida para una persona o empresa
+· *b2b* — volumen para otro negocio que revende
+· *coleccion* — la colección propia, tienda y online
 
-"el cliente X pagó el anticipo de $300.000" | "compré los bizcochos del pedido de X"
-→ registrar_movimiento(tipo, monto, concepto, pedido, categoria)
+"empieza un pedido de 150 platos para el Café del Valle" → crear_proyecto(nombre, linea)
+"pagué $140.000 de bizcochos del pedido del Café" → registrar_movimiento(...)
+"¿cuánto me dejó el Café del Valle?" → pnl_proyecto(proyecto)
+"¿qué línea deja más?" | "¿dónde estoy perdiendo?" → pnl_lineas()
 
-"¿cuánto me dejó el pedido de X?" | "¿ya me pagaron todo?" | "¿cuánto llevo gastado en X?"
-→ leer_movimientos(pedido) · compara contra lo cotizado y da el margen REAL
+UN SOLO REGISTRO. `registrar_movimiento` escribe una fila en Movimientos con la columna
+Proyecto puesta, y esa misma fila alimenta el PNL del mes (por categoría) y el del
+proyecto. No hay segundo libro ni hay que registrar dos veces.
 
-REGLAS:
-- Solo va acá lo atribuible a un pedido. Arriendo, servicios y nómina del mes NO tienen
-  pedido: esos siguen yendo a su pestaña de siempre con agregar_fila.
-- Un movimiento de pedido normalmente va en DOS sitios: acá (para el margen del pedido)
-  y en su pestaña del PNL (para el mes). Si ya lo registraste en el PNL, pasa
-  `pestana_pnl` para que quede la traza y no vuelva a avisar.
-- El margen sobre lo cotizado es el número que importa: dice si el cotizador está
-  acertando. Si el margen real sale muy por debajo del que prometía la cotización,
-  DILO — significa que hay costos que el modelo no está viendo.
+PREGUNTA SIEMPRE EL PROYECTO. Sin él, el movimiento no aparece en ningún PNL de
+proyecto. La excepción son los gastos generales del mes —arriendo, servicios, nómina
+fija—, que no pertenecen a ninguno y está bien que vayan sin proyecto.
+
+CÓMO SE LEE EL PNL:
+  Ingresos − materia prima − mano de obra = *margen bruto*
+  menos producción indirecta y comercial  = *contribución*
+La contribución es lo que el proyecto deja para pagar los fijos del mes. NO está
+descontado el arriendo, los servicios ni la gerencia: un proyecto con contribución
+positiva todavía puede no alcanzar si el mes tiene pocos proyectos.
+
+Si un proyecto sale con contribución NEGATIVA, dilo de frente y mira con qué costo se
+fue: casi siempre es mano de obra subestimada o un flete que nadie cotizó.
 
 ────────────────────────────────────────
 MÓDULO FLUJO DE CAJA
@@ -1424,16 +1486,24 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admi
                         resultado = _reg_cot_leer(inp.get("cliente", ""))
                     elif name == "marcar_cotizacion":
                         resultado = _reg_cot_estado(inp["numero"], inp["estado"])
+                    elif name == "crear_proyecto":
+                        resultado = _proy_crear(
+                            inp["proyecto"], inp["linea"], inp.get("cliente", ""),
+                            inp.get("cotizacion", ""), notas=inp.get("notas", ""))
+                    elif name == "reconstruir_proyectos":
+                        resultado = _proy_reconstruir()
+                    elif name == "pnl_proyecto":
+                        resultado = _proy_pnl(inp["proyecto"])
+                    elif name == "pnl_lineas":
+                        resultado = _proy_lineas(inp.get("linea", ""))
                     elif name == "registrar_movimiento":
                         resultado = _mov_registrar(
-                            inp["tipo"], inp["monto"], inp["concepto"], inp["pedido"],
-                            inp.get("categoria", ""), inp.get("fecha", ""),
-                            inp.get("forma_pago", ""), inp.get("pestana_pnl", ""),
-                            inp.get("notas", ""))
+                            inp["tipo"], inp["monto"], inp["concepto"],
+                            inp.get("proyecto", ""), inp.get("categoria", ""),
+                            inp.get("fecha", ""), inp.get("forma_pago", ""),
+                            inp.get("cliente", ""))
                     elif name == "leer_movimientos":
-                        resultado = (_mov_resumen(inp["pedido"])
-                                     if inp.get("resumen") and inp.get("pedido")
-                                     else _mov_leer(inp.get("pedido", "")))
+                        resultado = _mov_leer(inp.get("proyecto", ""))
                     elif name == "guardar_tiempo_estandar":
                         resultado = _cot_guardar_tiempo(
                             inp["etapa"], inp["tamano"], inp["dificultad"], inp["minutos"])

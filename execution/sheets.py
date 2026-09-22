@@ -165,6 +165,22 @@ def id_pestana(titulo: str, sheet_id: str = ""):
         return None
 
 
+def renombrar_pestana(viejo: str, nuevo: str, sheet_id: str = "") -> str:
+    """Aparta una pestaña sin destruirla."""
+    hid = id_pestana(viejo, sheet_id)
+    if hid is None:
+        return f"Error: no encontré la pestaña {viejo}."
+    try:
+        _service().spreadsheets().batchUpdate(
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
+            body={"requests": [{"updateSheetProperties": {
+                "properties": {"sheetId": hid, "title": nuevo},
+                "fields": "title"}}]}).execute()
+        return f"'{viejo}' ahora se llama '{nuevo}'."
+    except Exception as e:
+        return "Error: " + explicar(e, viejo, sheet_id)
+
+
 def borrar_filas(titulo: str, filas: list, sheet_id: str = "") -> str:
     """Borra filas por número (1-indexado, como las ve la gente en la hoja).
 
