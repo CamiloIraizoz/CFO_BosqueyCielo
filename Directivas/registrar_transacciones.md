@@ -66,7 +66,9 @@ Pottery Lab…) o por **categoría de gasto** (Materia Prima, Mano de Obra…). 
 a qué pedido pertenece, así que con ellas solas es imposible responder *"¿cuánto me dejó
 realmente el pedido de Camilo Rojas?"*.
 
-Por eso existe la pestaña **`Movimientos`** en *Ventas y Costos B&C* (`execution/movimientos.py`):
+Por eso existe la pestaña **`Movimientos por Pedido`** en *Ventas y Costos B&C*
+(`execution/movimientos.py`). **No confundirla con `Movimientos`**, que es el libro
+contable de toda la empresa y donde escribe `shopify_sync.py`:
 Fecha · Tipo · **Pedido** · Categoría · Concepto · Monto · Forma de pago · Pestaña PNL · Notas
 
 - `registrar_movimiento` — solo para plata atribuible a un pedido. Arriendo, servicios y

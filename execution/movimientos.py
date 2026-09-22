@@ -15,7 +15,10 @@ from datetime import datetime
 
 from sheets import agregar_fila, crear_pestana, escribir_rango, leer_sheet_numericos
 
-PESTANA = "Movimientos"
+# OJO: "Movimientos" ya existe y es el libro contable de toda la empresa
+# (Fecha · Mes · Año · Tipo · Categoría · Descripción · Cliente · Método de pago…),
+# donde escribe también shopify_sync. Este es OTRO libro, el de cada pedido.
+PESTANA = "Movimientos por Pedido"
 CABECERA = ["Fecha", "Tipo", "Pedido", "Categoría", "Concepto", "Monto",
             "Forma de pago", "Pestaña PNL", "Notas"]
 

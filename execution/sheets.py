@@ -153,6 +153,41 @@ def crear_pestana(titulo: str, sheet_id: str = "") -> str:
         return f"Error: {e}"
 
 
+def id_pestana(titulo: str, sheet_id: str = ""):
+    """El sheetId interno que pide batchUpdate (no es el nombre)."""
+    try:
+        r = _service().spreadsheets().get(spreadsheetId=sheet_id or SPREADSHEET_ID).execute()
+        for h in r.get("sheets", []):
+            if h["properties"]["title"] == titulo:
+                return h["properties"]["sheetId"]
+        return None
+    except Exception:
+        return None
+
+
+def borrar_filas(titulo: str, filas: list, sheet_id: str = "") -> str:
+    """Borra filas por número (1-indexado, como las ve la gente en la hoja).
+
+    Se borran de abajo hacia arriba: borrar la fila 10 corre la 11 al lugar 10,
+    y hacerlo al revés elimina filas equivocadas."""
+    hid = id_pestana(titulo, sheet_id)
+    if hid is None:
+        return f"Error: no encontré la pestaña {titulo}."
+    peticiones = [{"deleteDimension": {"range": {
+                      "sheetId": hid, "dimension": "ROWS",
+                      "startIndex": n - 1, "endIndex": n}}}
+                  for n in sorted(set(int(x) for x in filas), reverse=True)]
+    if not peticiones:
+        return "No había filas que borrar."
+    try:
+        _service().spreadsheets().batchUpdate(
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
+            body={"requests": peticiones}).execute()
+        return f"{len(peticiones)} filas borradas de {titulo}."
+    except Exception as e:
+        return "Error: " + explicar(e, titulo, sheet_id)
+
+
 def leer_sheet_numericos(rango: str, sheet_id: str = "") -> list:
     """Retorna valores crudos (números como float/int, texto como string) — UNFORMATTED_VALUE."""
     try:
