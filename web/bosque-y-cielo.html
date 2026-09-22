@@ -2008,6 +2008,17 @@
     ]);
   }
 
+  // Lo que entrega la base viene CONGELADO: el mismo objeto se reutiliza entre
+  // entregas, así que la plataforma lo sella. Guardarlo tal cual en PARAMS,
+  // TIEMPOS, HORNO o MATERIAL_TAMANO hacía que «Guardar ajustes» reventara al
+  // intentar escribir encima —"Cannot assign to read only property"— y como
+  // eso pasaba ANTES de llegar a la base, no se guardaba absolutamente nada.
+  // Todo lo que llega de un snapshot se clona antes de tocarlo.
+  function clonar(x) {
+    try { return JSON.parse(JSON.stringify(x)); }
+    catch (e) { return x; }
+  }
+
   function motivo(e) {
     if (!e) return "no dijo por qué";
     if (e.code === "sin_respuesta") return "la base no respondió";
@@ -2967,8 +2978,8 @@
       d.doc("config/materiales").onSnapshot(function (snap) {
         if (snap.exists) {
           var datos = snap.data() || {};
-          if (datos.bizcocho) MATERIAL_TAMANO.bizcocho = datos.bizcocho;
-          if (datos.oz_esmalte) MATERIAL_TAMANO.oz_esmalte = datos.oz_esmalte;
+          if (datos.bizcocho) MATERIAL_TAMANO.bizcocho = clonar(datos.bizcocho);
+          if (datos.oz_esmalte) MATERIAL_TAMANO.oz_esmalte = clonar(datos.oz_esmalte);
           recalcular();
           if (!$("vista-ajustes").hidden) pintarAjustes();
         }
@@ -2977,8 +2988,8 @@
       d.doc("config/horno").onSnapshot(function (snap) {
         if (snap.exists) {
           var datos = snap.data() || {};
-          if (datos.capacidad) HORNO.capacidad = datos.capacidad;
-          if (datos.quemas && datos.quemas.length) HORNO.quemas = datos.quemas;
+          if (datos.capacidad) HORNO.capacidad = clonar(datos.capacidad);
+          if (datos.quemas && datos.quemas.length) HORNO.quemas = clonar(datos.quemas);
           recalcular();
           if (!$("vista-ajustes").hidden) pintarAjustes();
         }
@@ -2986,13 +2997,15 @@
 
       d.doc("config/tiempos").onSnapshot(function (snap) {
         if (snap.exists) {
-          var datos = snap.data() || {};
+          // Se clona de una: el propio `datos` también viene sellado y la
+          // migración de nombres de abajo le escribe encima.
+          var datos = clonar(snap.data() || {});
           // Las bases viejas traen otros nombres de etapa.
           Object.keys(ETAPAS_VIEJAS).forEach(function (viejo) {
             if (datos[viejo] && !datos[ETAPAS_VIEJAS[viejo]]) datos[ETAPAS_VIEJAS[viejo]] = datos[viejo];
           });
           Object.keys(TIEMPOS).forEach(function (etapa) {
-            if (datos[etapa]) TIEMPOS[etapa] = datos[etapa];
+            if (datos[etapa]) TIEMPOS[etapa] = clonar(datos[etapa]);
           });
           recalcular();
           if (!$("vista-ajustes").hidden) pintarAjustes();
