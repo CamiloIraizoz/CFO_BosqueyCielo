@@ -1295,6 +1295,48 @@ def descargar_foto(file_id: str):
         return None
 
 
+# El prompt del sistema y las 47 herramientas son ~16.500 tokens que viajan
+# IDÉNTICOS en cada mensaje. Marcarlos como cacheables baja esa parte ~90%.
+# La caché dura unos minutos, así que una conversación seguida la aprovecha
+# entera y un mensaje suelto cada tanto no.
+_CACHE_OK = True
+
+
+def _pedir_a_claude(sistema_txt, herramientas, messages):
+    global _CACHE_OK
+    kwargs = {
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 512,
+        "tool_choice": {"type": "auto"},
+        "messages": messages,
+    }
+    if _CACHE_OK:
+        kwargs["system"] = [{"type": "text", "text": sistema_txt,
+                             "cache_control": {"type": "ephemeral"}}]
+        # El corte va en la última herramienta: cachea todo el bloque.
+        hs = [dict(t) for t in herramientas]
+        if hs:
+            hs[-1] = dict(hs[-1])
+            hs[-1]["cache_control"] = {"type": "ephemeral"}
+        kwargs["tools"] = hs
+    else:
+        kwargs["system"] = sistema_txt
+        kwargs["tools"] = herramientas
+
+    try:
+        return client.messages.create(**kwargs)
+    except anthropic.BadRequestError:
+        # Si la API no acepta la caché, seguir sin ella antes que dejar el bot
+        # caído. Se desactiva una sola vez y no se vuelve a intentar.
+        if not _CACHE_OK:
+            raise
+        _CACHE_OK = False
+        print("[bot] La caché de prompt no fue aceptada; sigo sin ella.")
+        kwargs["system"] = sistema_txt
+        kwargs["tools"] = herramientas
+        return client.messages.create(**kwargs)
+
+
 def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admin") -> str:
     history = conversation_history.get(chat_id, [])
     if rol == "taller":
@@ -1326,14 +1368,9 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admi
 
         for retry in range(4):
             try:
-                response = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=512,
-                    system=sistema + f"\n\nFECHA HOY: {date.today().strftime('%d/%m/%Y')}",
-                    tools=herramientas,
-                    tool_choice={"type": "auto"},
-                    messages=messages
-                )
+                response = _pedir_a_claude(
+                    sistema + f"\n\nFECHA HOY: {date.today().strftime('%d/%m/%Y')}",
+                    herramientas, messages)
                 break
             except anthropic.RateLimitError:
                 if retry == 3:
