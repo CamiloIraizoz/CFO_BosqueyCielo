@@ -143,7 +143,13 @@ def buscar(nombre):
         cliente = str(f[2]).strip().lower() if len(f) > 2 else ""
         if clave == p or clave in p or (cliente and clave in cliente):
             return f
-    return None
+    # Por cliente: "Manuela Florez - Vajilla" encuentra el proyecto de Manuela,
+    # pero solo si ella tiene UN proyecto abierto — con dos, adivinar es peor.
+    del_cliente = [f for f in listar()
+                   if len(f) > 2 and str(f[2]).strip()
+                   and str(f[2]).strip().lower() in clave
+                   and (len(f) < 4 or str(f[3]).strip().lower() != "cerrado")]
+    return del_cliente[0] if len(del_cliente) == 1 else None
 
 
 def crear(proyecto, linea, cliente="", cotizacion="", inicio="", notas=""):

@@ -57,6 +57,18 @@ def registrar(tipo, monto, concepto, proyecto="", categoria="", fecha="",
     if not leer_sheet_numericos(f"{PESTANA}!A1:K1"):
         return f"❌ No pude leer la pestaña {PESTANA}. No escribí nada."
 
+    # El proyecto se escribe con el nombre EXACTO del registro. Si el bot lo
+    # parafrasea ("Manuela Florez - Vajilla" por "Manuela Florez - BYC-028847"),
+    # la fila queda huérfana y el PNL del proyecto no la ve.
+    if str(proyecto or "").strip():
+        from proyectos import buscar, listar
+        fila_p = buscar(proyecto)
+        if not fila_p:
+            nombres = ", ".join(str(x[0]).strip() for x in listar()) or "ninguno"
+            return (f"❌ No existe el proyecto '{proyecto}'. No escribí nada. "
+                    f"Créalo primero con crear_proyecto, o usa uno de estos: {nombres}.")
+        proyecto = str(fila_p[0]).strip()
+
     f, mes, anio = _partes_fecha(fecha)
     fila = [f, mes, anio, "Ingreso" if tipo == "ingreso" else "Egreso",
             categoria or ("Ecommerce" if tipo == "ingreso" else "Otros"),

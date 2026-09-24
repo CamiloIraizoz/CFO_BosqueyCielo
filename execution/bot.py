@@ -1363,7 +1363,7 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admi
     iteraciones = 0
     last_tool_result = None
 
-    while iteraciones < 6:
+    while iteraciones < 10:
         iteraciones += 1
 
         for retry in range(4):
@@ -1630,6 +1630,12 @@ def procesar_mensaje(chat_id: int, texto: str, foto_bytes=None, rol: str = "admi
             conversation_history[chat_id] = new_history[-10:]
             return respuesta
 
+    # Se acabaron las vueltas: lo que alcanzó a hacerse SÍ quedó escrito. Decir
+    # "intenta de nuevo" sin más invita a repetir y duplicar registros.
+    if last_tool_result:
+        return ("⚠️ Me quedé a mitad de camino. Lo último que alcancé a hacer:\n\n"
+                f"{last_tool_result}\n\nAntes de repetir, pregúntame qué quedó "
+                "registrado para no duplicar nada.")
     return "⚠️ No pude completar la operación. Intenta de nuevo."
 
 
