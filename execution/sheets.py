@@ -229,3 +229,27 @@ def escribir_rango(rango: str, filas: list, sheet_id: str = "") -> str:
         return f"{len(filas)} filas escritas en {rango}."
     except Exception as e:
         return "Error: " + explicar(e, rango, sheet_id)
+
+
+def limpiar_rango(rango: str, sheet_id: str = "") -> str:
+    """Borra los valores (no el formato) de un rango. Para reescribir una tabla
+    que puede haber encogido sin dejar columnas viejas colgando."""
+    try:
+        _service().spreadsheets().values().clear(
+            spreadsheetId=sheet_id or SPREADSHEET_ID, range=rango, body={}).execute()
+        return f"{rango} limpio."
+    except Exception as e:
+        return "Error: " + explicar(e, rango, sheet_id)
+
+
+def formatear(peticiones: list, sheet_id: str = "") -> str:
+    """Manda peticiones de batchUpdate (formato, anchos, congelar filas…)."""
+    if not peticiones:
+        return "Nada que formatear."
+    try:
+        _service().spreadsheets().batchUpdate(
+            spreadsheetId=sheet_id or SPREADSHEET_ID,
+            body={"requests": peticiones}).execute()
+        return f"{len(peticiones)} cambios de formato aplicados."
+    except Exception as e:
+        return "Error: " + explicar(e, "", sheet_id)

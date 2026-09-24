@@ -80,10 +80,14 @@ def registrar(tipo, monto, concepto, proyecto="", categoria="", fecha="",
     signo = "+" if tipo == "ingreso" else "−"
     salida = [f"✅ {signo}{_pesos(monto)} · {concepto}"]
     if proyecto:
-        from proyectos import cifras
-        ing, _, eg = cifras(proyecto)
-        salida.append(f"   Proyecto *{proyecto}*: {_pesos(ing)} cobrado · "
-                      f"{_pesos(eg)} gastado → {_pesos(ing - eg)}")
+        from proyectos import actualizar_hoja, calcular
+        todos = calcular()
+        p = next((x for x in todos if x["nombre"] == proyecto), None)
+        if p:
+            salida.append(f"   Proyecto *{proyecto}*: {_pesos(p['ingresos'])} cobrado · "
+                          f"contribución {_pesos(p['contribucion'])} · "
+                          f"utilidad {_pesos(p['operacional'])}")
+        salida[-1] += actualizar_hoja(todos)
     else:
         salida.append("   ⚠️ Sin proyecto: no va a aparecer en ningún PNL de proyecto. "
                       "Si pertenece a uno, dime cuál y lo corrijo.")

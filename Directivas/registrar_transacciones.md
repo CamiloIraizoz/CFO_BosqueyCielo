@@ -103,18 +103,34 @@ y real vía SUMIFS; nadie mantiene tres presupuestos. Si la pestaña vieja todav
 `crear_proyecto` se niega a escribir y pide `reconstruir_proyectos`, que la aparta como
 *Proyectos (v1)* sin borrar nada.
 
-**Cómo se lee el PNL de un proyecto:**
+**Cómo se lee el PNL de un proyecto** (2026-09-24 — misma estructura que el PNL del mes):
 
 ```
-Ingresos − materia prima − mano de obra = margen bruto
-        − producción indirecta − comercial = contribución
+Ingresos − costo de ventas (materia prima, mano de obra, indirectos) = utilidad bruta
+         − gastos directos de venta (envíos, empaques, comisiones)   = contribución
+         − gastos compartidos (taller, marca, administración)        = utilidad operacional
 ```
 
-La **contribución** es lo que el proyecto deja para pagar los fijos del mes. Los fijos
-(arriendo, servicios, gerencia) NO se reparten entre proyectos a propósito: repartirlos
-exige un criterio discutible y esconde la señal que importa, que es si el proyecto cubre
-sus propios costos. Un proyecto con contribución positiva todavía puede no alcanzar si
-el mes tuvo pocos proyectos.
+Los renglones salen de la **Categoría** de cada fila de Movimientos, la misma que usa
+`setup_resumen.py`; las palabras clave solo clasifican lo que tenga una categoría fuera
+de la lista.
+
+**Gastos compartidos** = egresos del mes SIN proyecto en Mano de Obra y Costos
+Indirectos (taller), Redes/Publicidad/Eventos (marca) y Arriendo, Salario Gerente,
+Aportes, Contadora, Servicios Admin y Gastos Operativos (administración). Se reparten
+**cada mes según ventas**: parte = lo que el proyecto cobró ese mes ÷ todo lo que cobró
+la empresa ese mes (sin ingresos financieros). Materia prima, empaques, envíos y
+comisiones sin proyecto NO entran: son costo directo de tienda y online.
+
+Consecuencias del criterio, que hay que saber explicar: un proyecto sin cobros no carga
+compartidos todavía; la parte de un mes abierto se mueve hasta que el mes cierra; y un
+proyecto que cobra en un mes flojo carga una tajada grande. El criterio alternativo —por
+pieza, como el cotizador (fijos ÷ 150 × piezas)— quedó descartado por ahora porque exige
+llevar las piezas de cada proyecto.
+
+**Pestaña `PNL Proyectos`**: la reescribe el bot entera (valores y formato) cada vez que
+se consulta un PNL o se registra un movimiento con proyecto; también
+`python3 execution/proyectos.py`. No se edita a mano.
 
 **Clasificación de egresos** (`proyectos.GRUPOS`): materia prima · mano de obra ·
 producción indirecta · comercial · otros. Se buscan **palabras completas**: buscar "gas"

@@ -478,10 +478,11 @@ TOOLS = [
     {
         "name": "pnl_proyecto",
         "description": (
-            "El mini PNL de un proyecto: ingresos, costos agrupados (materia prima, mano "
-            "de obra, producción indirecta, comercial), margen bruto y contribución, más "
-            "el contraste con lo cotizado. Para '¿cuánto me dejó X?', '¿estoy ganando "
-            "con X?', '¿cómo va el proyecto de X?'."
+            "El PNL completo de un proyecto: ingresos, costo de ventas, utilidad bruta, "
+            "gastos directos de venta, contribución, gastos compartidos repartidos según "
+            "ventas y utilidad operacional, más lo que falta cobrar. También actualiza la "
+            "pestaña 'PNL Proyectos'. Para '¿cuánto me dejó X?', '¿estoy ganando con X?', "
+            "'¿cómo va el proyecto de X?'. Devuelve el mensaje listo: pásalo tal cual."
         ),
         "input_schema": {
             "type": "object",
@@ -493,7 +494,8 @@ TOOLS = [
         "name": "pnl_lineas",
         "description": (
             "Compara las tres líneas de negocio —Personalización, B2B y Colección "
-            "propia— con la contribución de cada una y de cada proyecto dentro. Para "
+            "propia— con la contribución y la utilidad de cada una y de cada proyecto "
+            "dentro. También actualiza la pestaña 'PNL Proyectos'. Para "
             "'¿qué línea deja más?', '¿cómo vamos por línea?', '¿dónde estoy perdiendo?'."
         ),
         "input_schema": {
@@ -1232,15 +1234,20 @@ PREGUNTA SIEMPRE EL PROYECTO. Sin él, el movimiento no aparece en ningún PNL d
 proyecto. La excepción son los gastos generales del mes —arriendo, servicios, nómina
 fija—, que no pertenecen a ninguno y está bien que vayan sin proyecto.
 
-CÓMO SE LEE EL PNL:
-  Ingresos − materia prima − mano de obra = *margen bruto*
-  menos producción indirecta y comercial  = *contribución*
-La contribución es lo que el proyecto deja para pagar los fijos del mes. NO está
-descontado el arriendo, los servicios ni la gerencia: un proyecto con contribución
-positiva todavía puede no alcanzar si el mes tiene pocos proyectos.
+CÓMO SE LEE EL PNL (misma estructura que el PNL del mes):
+  Ingresos − costo de ventas (materia prima, mano de obra, indirectos) = *utilidad bruta*
+  − gastos directos de venta (envíos, empaques, comisiones)            = *contribución*
+  − gastos compartidos (taller, marca, administración)                 = *utilidad operacional*
+Los gastos compartidos son los egresos del mes SIN proyecto, repartidos cada mes
+según lo que el proyecto cobró sobre todo lo que cobró la empresa. Consecuencias que
+hay que decir si preguntan: un proyecto sin cobros no carga compartidos todavía, y
+mientras el mes no cierre su parte puede moverse.
+Todo queda también en la pestaña *PNL Proyectos* del Sheet, un proyecto por columna.
 
-Si un proyecto sale con contribución NEGATIVA, dilo de frente y mira con qué costo se
-fue: casi siempre es mano de obra subestimada o un flete que nadie cotizó.
+Si la CONTRIBUCIÓN es negativa, el proyecto pierde plata por sí solo: dilo de frente
+y mira con qué costo se fue (casi siempre mano de obra subestimada o un flete que
+nadie cotizó). Si solo la utilidad operacional es negativa, cubre lo suyo pero no
+alcanza a pagar su parte de los fijos.
 
 ────────────────────────────────────────
 MÓDULO FLUJO DE CAJA
